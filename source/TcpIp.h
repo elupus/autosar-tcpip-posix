@@ -168,8 +168,9 @@ typedef uint16 TcpIp_SocketIdType;
  */
 typedef uint8  TcpIp_LocalAddrIdType;
 
-#define TCPIP_IPADDR_ANY  0xffffffffu
-#define TCPIP_PORT_ANY    0xffffu
+#define TCPIP_IPADDR_ANY       0xffffffffu
+#define TCPIP_PORT_ANY         0xffffu
+#define TCPIP_SOCKETID_INVALID (TcpIp_SocketIdType)0xffffu
 
 /**
  * @brief By this API service the TCP/IP stack is requested to allocate a new socket.
