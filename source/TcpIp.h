@@ -188,4 +188,10 @@ Std_ReturnType TcpIp_SoAdGetSocket(
 
 void TcpIp_Init(const TcpIp_ConfigType* config);
 
+
+Std_ReturnType TcpIp_Bind(TcpIp_SocketIdType       id, TcpIp_LocalAddrIdType local, uint16* port);
+Std_ReturnType TcpIp_TcpListen (TcpIp_SocketIdType id, uint16 channels);
+Std_ReturnType TcpIp_TcpConnect(TcpIp_SocketIdType id, const TcpIp_SockAddrType* remote);
+
+
 #endif /* TCPIP_H_ */

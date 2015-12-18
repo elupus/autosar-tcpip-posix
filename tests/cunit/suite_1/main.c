@@ -41,7 +41,7 @@ int suite_clean(void)
 {
     TcpIp_SocketIdType index;
     for(index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
-        TcpIp_FreeSocket(&TcpIp_Sockets[index]);
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
     }
     return 0;
 }
