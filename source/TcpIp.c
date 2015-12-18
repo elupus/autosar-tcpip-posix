@@ -118,27 +118,38 @@ Std_ReturnType TcpIp_Bind(
 
     if (local_addr != TCPIP_LOCALADDRID_ANY) {
         /* TODO */
-        return E_NOT_OK;
+        res = E_NOT_OK;
+        goto TcpIp_Bind_Exit;
     }
 
     if (s->domain == TCPIP_AF_INET) {
         int v;
         struct sockaddr_in addr = {};
+        socklen_t len;
         addr.sin_family = AF_INET;
         addr.sin_port   = *port;
-        addr.sin_len    = sizeof(addr);
-        if (bind(s->fd, (const struct sockaddr*)&addr, sizeof(addr)) == 0) {
-            *port = addr.sin_port;
-            res = E_OK;
-        } else {
+        if (bind(s->fd, (const struct sockaddr*)&addr, sizeof(addr)) != 0) {
             res = E_NOT_OK;
+            goto TcpIp_Bind_Exit;
         }
+
+        len = sizeof(addr);
+        if (getsockname(s->fd, (struct sockaddr*)&addr, &len) != 0) {
+            res = E_NOT_OK;
+            goto TcpIp_Bind_Exit;
+        }
+
+        *port = addr.sin_port;
+        res = E_OK;
+
     } else if (s->domain == TCPIP_AF_INET6) {
         /* TODO */
         res = E_NOT_OK;
     } else {
         res = E_NOT_OK;
+        goto TcpIp_Bind_Exit;
     }
+TcpIp_Bind_Exit:
     return res;
 }
 

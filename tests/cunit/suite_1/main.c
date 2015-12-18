@@ -57,6 +57,7 @@ void suite_test_simple_bind_x(TcpIp_DomainType domain, TcpIp_ProtocolType protoc
 
     port = TCPIP_PORT_ANY;
     CU_ASSERT_EQUAL(TcpIp_Bind(suite_state.id, TCPIP_LOCALADDRID_ANY, &port), E_OK);
+    CU_ASSERT_NOT_EQUAL(port, TCPIP_PORT_ANY);
 }
 
 void suite_test_simple_bind_tcp_v4(void)

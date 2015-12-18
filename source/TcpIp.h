@@ -173,7 +173,7 @@ typedef uint16 TcpIp_SocketIdType;
 typedef uint8  TcpIp_LocalAddrIdType;
 
 #define TCPIP_IPADDR_ANY       0xffffffffu
-#define TCPIP_PORT_ANY         0xffffu
+#define TCPIP_PORT_ANY         0x0u
 #define TCPIP_SOCKETID_INVALID (TcpIp_SocketIdType)0xffffu
 #define TCPIP_LOCALADDRID_ANY  (TcpIp_LocalAddrIdType)0xffu
 /**
