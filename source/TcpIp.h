@@ -1,3 +1,7 @@
+
+#ifndef TCPIP_H_
+#define TCPIP_H_
+
 #include "Std_Types.h"
 
 /**
@@ -171,7 +175,7 @@ typedef uint8  TcpIp_LocalAddrIdType;
 #define TCPIP_IPADDR_ANY       0xffffffffu
 #define TCPIP_PORT_ANY         0xffffu
 #define TCPIP_SOCKETID_INVALID (TcpIp_SocketIdType)0xffffu
-
+#define TCPIP_LOCALADDRID_ANY  (TcpIp_LocalAddrIdType)0xffu
 /**
  * @brief By this API service the TCP/IP stack is requested to allocate a new socket.
  *        Note: Each accepted incoming TCP connection also allocates a socket resource.
@@ -183,3 +187,5 @@ Std_ReturnType TcpIp_SoAdGetSocket(
     );
 
 void TcpIp_Init(const TcpIp_ConfigType* config);
+
+#endif /* TCPIP_H_ */
