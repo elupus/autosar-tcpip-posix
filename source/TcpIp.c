@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <netinet/in.h>
+#include <errno.h>
 
 typedef int TcpIp_OsSocketType;
 
@@ -47,6 +48,29 @@ static void TcpIp_InitSocket(TcpIp_SocketIdType id)
     s->state = TCPIP_SOCKET_STATE_UNUSED;
     s->fd = INVALID_SOCKET;
 }
+
+
+static sint8 TcpIp_GetBsdTypeFromProtocol(TcpIp_ProtocolType  protocol)
+{
+    sint8 res;
+    switch(protocol) {
+        case TCPIP_IPPROTO_TCP:
+            res = SOCK_STREAM;
+            break;
+        case TCPIP_IPPROTO_UDP:
+            res = SOCK_DGRAM;
+            break;
+        default:
+            res = 0;
+    }
+    return res;
+}
+
+static sint8 TcpIp_GetBsdDomainFromDomain(TcpIp_DomainType domain)
+{
+    return (sint8)domain;
+}
+
 
 /**
  * @brief This service initializes the TCP/IP Stack.
@@ -145,7 +169,7 @@ Std_ReturnType TcpIp_Bind(
 
         *port = addr.sin_port;
         res = E_OK;
-        s->state = TCPIP_SOCKET_STATE_BOUND;
+        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_BOUND);
 
     } else if (s->domain == TCPIP_AF_INET6) {
         /* TODO */
@@ -170,8 +194,9 @@ Std_ReturnType TcpIp_TcpListen(
         res = E_OK;
         TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_LISTEN);
     } else {
-
+        res = E_NOT_OK;
     }
+    return res;
 }
 
 Std_ReturnType TcpIp_TcpConnect(
@@ -179,7 +204,46 @@ Std_ReturnType TcpIp_TcpConnect(
         const TcpIp_SockAddrType*   remote
     )
 {
-    return E_NOT_OK;
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    Std_ReturnType    res;
+
+    if (remote->domain != s->domain) {
+        return E_NOT_OK;
+    }
+
+    if (s->domain == TCPIP_AF_INET) {
+        int v;
+        struct sockaddr_in      addr = {};
+        TcpIp_SockAddrInetType* inet = (TcpIp_SockAddrInetType*)remote;
+        addr.sin_family      = AF_INET;
+        addr.sin_port        = inet->port;
+        addr.sin_addr.s_addr = inet->addr[0];
+        addr.sin_len         = sizeof(addr);
+        v = connect(s->fd, (const struct sockaddr*)&addr, sizeof(addr));
+        if (v != 0) {
+            v = errno;
+        }
+
+        if (v == 0) {
+            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTED);
+            res = E_OK;
+        } else if(v == EINPROGRESS) {
+            res = E_OK;
+            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTING);
+        } else {
+            res = E_NOT_OK;
+        }
+
+    } else if (remote->domain == TCPIP_AF_INET6) {
+
+        /* TODO */
+        res = E_NOT_OK;
+    } else {
+        res = E_NOT_OK;
+        goto TcpIp_Bind_Exit;
+    }
+TcpIp_Bind_Exit:
+    return res;
 }
 
 Std_ReturnType TcpIp_TcpTransmit(
@@ -190,27 +254,6 @@ Std_ReturnType TcpIp_TcpTransmit(
     )
 {
     return E_NOT_OK;
-}
-
-static sint8 TcpIp_GetBsdTypeFromProtocol(TcpIp_ProtocolType  protocol)
-{
-    sint8 res;
-    switch(protocol) {
-        case TCPIP_IPPROTO_TCP:
-            res = SOCK_STREAM;
-            break;
-        case TCPIP_IPPROTO_UDP:
-            res = SOCK_DGRAM;
-            break;
-        default:
-            res = 0;
-    }
-    return res;
-}
-
-static sint8 TcpIp_GetBsdDomainFromDomain(TcpIp_DomainType domain)
-{
-    return (sint8)domain;
 }
 
 static Std_ReturnType TcpIp_GetFreeSocket(TcpIp_SocketIdType* socketid)
@@ -255,12 +298,11 @@ Std_ReturnType TcpIp_SoAdGetSocket(
         TcpIp_SocketIdType* socketid
     )
 {
-    TcpIp_SocketIdType index;
     Std_ReturnType     res;
 
     res = TcpIp_GetFreeSocket(socketid);
     if (res == E_OK) {
-        TcpIp_SocketType*  s = &TcpIp_Sockets[index];
+        TcpIp_SocketType*  s = &TcpIp_Sockets[*socketid];
         TcpIp_OsSocketType fd;
         fd = socket( TcpIp_GetBsdDomainFromDomain(domain)
                    , TcpIp_GetBsdTypeFromProtocol(protocol)
@@ -284,20 +326,88 @@ void TcpIp_SocketState_Connecting(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
-    int res;
+    int v;
 
     if (p->revents & POLLOUT) {
         struct sockaddr_storage addr;
         socklen_t len = sizeof(addr);
 
         /* check if connect succeeded */
-        res = getpeername(s->fd, (struct sockaddr*)&addr, &len);
-        if (res == 0) {
-            s->state = TCPIP_SOCKET_STATE_CONNECTED;
+        v = getpeername(s->fd, (struct sockaddr*)&addr, &len);
+        if (v == 0) {
+            TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_CONNECTED);
             SoAd_TcpConnected(index);
         } else {
-            s->state = TCPIP_SOCKET_STATE_ALLOCATED; /* error */
+            TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_ALLOCATED);
         }
+    }
+}
+
+void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
+{
+    TcpIp_SocketType*  s   = &TcpIp_Sockets[index];
+    TcpIp_SocketIdType id2 = TCPIP_SOCKETID_INVALID;
+    int fd                 = INVALID_SOCKET;
+
+    socklen_t len;
+    union {
+        struct sockaddr_storage storage;
+        struct sockaddr_in      in;
+    } addr;
+    len = sizeof(sizeof(addr));
+
+    union {
+        TcpIp_SockAddrType     base;
+        TcpIp_SockAddrInetType inet;
+    } data = {0};
+
+    fd = accept(s->fd, (struct sockaddr*)&addr, &len);
+    if (fd == INVALID_SOCKET) {
+        goto cleanup;
+    }
+
+    if (TcpIp_SoAdGetSocket(s->domain, s->protocol, &id2) != E_OK) {
+        goto cleanup;
+    }
+
+    if (addr.storage.ss_family == AF_INET) {
+        data.inet.addr[0] = addr.in.sin_addr.s_addr;
+        data.inet.port    = addr.in.sin_port;
+        data.inet.domain  = TCPIP_AF_INET;
+
+    } else if (addr.storage.ss_family == AF_INET6)  {
+        /* TODO IPV6 support */
+        goto cleanup;
+    } else {
+        goto cleanup;
+    }
+
+    if (SoAd_TcpAccepted(index, id2, &data.base) != E_OK) {
+        goto cleanup;
+    }
+
+    TcpIp_SocketState_Enter(id2, TCPIP_SOCKET_STATE_CONNECTED);
+    goto done;
+
+cleanup:
+    if (id2 != TCPIP_SOCKETID_INVALID) {
+        TcpIp_SocketState_Enter(id2, TCPIP_SOCKET_STATE_UNUSED);
+    }
+
+    if (fd != INVALID_SOCKET) {
+        closesocket(fd);
+    }
+done:
+    return;
+}
+
+void TcpIp_SocketState_Listen(TcpIp_SocketIdType index)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[index];
+    struct pollfd*    p = &TcpIp_PollFds[index];
+
+    if (p->revents & POLLIN) {
+        TcpIp_SocketState_Listen_Accept(index);
     }
 }
 
@@ -324,6 +434,7 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
             p->events = POLLOUT;
             break;
 
+        case TCPIP_SOCKET_STATE_LISTEN:
         case TCPIP_SOCKET_STATE_TCPCLOSE:
             p->events = POLLIN;
             break;
@@ -351,6 +462,9 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
         case TCPIP_SOCKET_STATE_CONNECTING:
             TcpIp_SocketState_Connecting(index);
             break;
+        case TCPIP_SOCKET_STATE_LISTEN:
+            TcpIp_SocketState_Listen(index);
+            break;
         case TCPIP_SOCKET_STATE_TCPCLOSE:
             TcpIp_SocketState_TcpClose(index);
             break;
@@ -363,7 +477,6 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
 void TcpIp_MainFunction(void)
 {
     TcpIp_SocketIdType index;
-    int                timeout = 1;
     int                res;
 
     for (index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
@@ -371,7 +484,7 @@ void TcpIp_MainFunction(void)
         TcpIp_PollFds[index].revents = 0;
     }
 
-    res = poll(TcpIp_PollFds, TCPIP_MAX_SOCKETS, timeout);
+    res = poll(TcpIp_PollFds, TCPIP_MAX_SOCKETS, 0);
     if (res > 0) {
         /* something to do */
     } else if (res < 0) {

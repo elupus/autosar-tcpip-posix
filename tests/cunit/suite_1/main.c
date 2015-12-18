@@ -2,30 +2,44 @@
 
 #include "CUnit/Basic.h"
 #include "CUnit/Automated.h"
+#include <arpa/inet.h>
 
-
-void SoAd_TcpConnected(
-        TcpIp_SocketIdType SocketId
-    )
-{
-
-}
 struct suite_state {
+    boolean            connected[TCPIP_MAX_SOCKETS];
     TcpIp_SocketIdType id;
-    TcpIp_EventType    event;
+    TcpIp_SocketIdType accept_id;
+    TcpIp_EventType    events[TCPIP_MAX_SOCKETS];
 };
 
 struct suite_state suite_state;
 
+void SoAd_TcpConnected(
+        TcpIp_SocketIdType id
+    )
+{
+    suite_state.connected[id] = TRUE;
+}
 
 void SoAd_TcpIpEvent(
         TcpIp_SocketIdType          id,
         TcpIp_EventType             event
     )
 {
-    CU_ASSERT_EQUAL(suite_state.id, id);
-    suite_state.event = event;
+    suite_state.events[id] = event;
 }
+
+
+Std_ReturnType SoAd_TcpAccepted(
+        TcpIp_SocketIdType          id,
+        TcpIp_SocketIdType          id_connected,
+        const TcpIp_SockAddrType*   remote
+    )
+{
+    suite_state.accept_id               = id_connected;
+    suite_state.connected[id_connected] = TRUE;
+    return E_OK;
+}
+
 
 TcpIp_ConfigType config = {
 
@@ -60,6 +74,20 @@ void suite_test_simple_bind_x(TcpIp_DomainType domain, TcpIp_ProtocolType protoc
     CU_ASSERT_NOT_EQUAL(port, TCPIP_PORT_ANY);
 }
 
+void suite_test_close_x(boolean abort, TcpIp_EventType event, int count)
+{
+    suite_state.events[suite_state.id] = -1;
+    CU_ASSERT_EQUAL(TcpIp_Close(suite_state.id, abort), E_OK);
+
+    for (int i; i < count && suite_state.events[suite_state.id] != event ; ++i) {
+        TcpIp_MainFunction();
+        usleep(1000);
+    }
+
+    CU_ASSERT_EQUAL(suite_state.events[suite_state.id], event);
+}
+
+
 void suite_test_simple_bind_tcp_v4(void)
 {
     suite_test_simple_bind_x(TCPIP_AF_INET, TCPIP_IPPROTO_TCP);
@@ -70,16 +98,10 @@ void suite_test_simple_bind_udp_v4(void)
     suite_test_simple_bind_x(TCPIP_AF_INET, TCPIP_IPPROTO_UDP);
 }
 
-void suite_test_close_x(boolean abort, TcpIp_EventType event, int count)
+void suite_test_simple_listen_tcp_v4(void)
 {
-    suite_state.event = -1;
-    CU_ASSERT_EQUAL(TcpIp_Close(suite_state.id, abort), E_OK);
-
-    for (int i; i < count && suite_state.event != event ; ++i) {
-        TcpIp_MainFunction();
-    }
-
-    CU_ASSERT_EQUAL(suite_state.event, event);
+    suite_test_simple_bind_x(TCPIP_AF_INET, TCPIP_IPPROTO_TCP);
+    CU_ASSERT_EQUAL(TcpIp_TcpListen(suite_state.id, 100), E_OK);
 }
 
 void suite_test_abort_tcp(void)
@@ -102,6 +124,44 @@ void suite_test_close_udp(void)
     suite_test_close_x(FALSE, TCPIP_UDP_CLOSED, 0);
 }
 
+void suite_test_loopback_connect(void)
+{
+    uint16 port;
+    TcpIp_SocketIdType listen, connect;
+    struct in_addr     loopback;
+    inet_pton(AF_INET, "127.0.0.1", &loopback);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(TCPIP_AF_INET, TCPIP_IPPROTO_TCP, &listen), E_OK);
+
+    port = TCPIP_PORT_ANY;
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpListen(listen, 100)                                  , E_OK);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(TCPIP_AF_INET, TCPIP_IPPROTO_TCP, &connect), E_OK);
+
+    TcpIp_SockAddrInetType inet = {};
+    inet.domain  = TCPIP_AF_INET;
+    inet.port    = port;
+    inet.addr[0] = loopback.s_addr;
+
+    suite_state.connected[connect]        = FALSE;
+    suite_state.events[connect]           = -1;
+    suite_state.accept_id                 = listen;
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(connect, &inet.base), E_OK);
+
+    for (int i = 0; i < 1000 && ( (suite_state.connected[connect]  != TRUE)
+                             ||   (suite_state.accept_id == listen)); ++i) {
+        TcpIp_MainFunction();
+        usleep(1000);
+    }
+    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, connect);
+    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, listen);
+
+    CU_ASSERT_EQUAL_FATAL(suite_state.connected[connect]              , TRUE);
+    CU_ASSERT_EQUAL_FATAL(suite_state.connected[suite_state.accept_id], TRUE);
+}
+
 int main(void)
 {
     CU_pSuite suite = NULL;
@@ -109,7 +169,6 @@ int main(void)
     /* initialize the CUnit test registry */
     if (CUE_SUCCESS != CU_initialize_registry())
       return CU_get_error();
-
 
     /* add a suite to the registry */
     suite = CU_add_suite("Suite_Generic", suite_init, suite_clean);
@@ -125,6 +184,14 @@ int main(void)
 
     CU_add_test(suite, "simple_bind_udp_v4"             , suite_test_simple_bind_udp_v4);
     CU_add_test(suite, "close_udp"                      , suite_test_close_udp);
+
+    CU_add_test(suite, "simple_listen_tcp_v4"           , suite_test_simple_listen_tcp_v4);
+    CU_add_test(suite, "close_tcp"                      , suite_test_close_tcp);
+
+    /* add a suite to the registry */
+    suite = CU_add_suite("Suite_Loopback"               , suite_init, suite_clean);
+    CU_add_test(suite, "connect"                        , suite_test_loopback_connect);
+
 
     /* Run all tests using the CUnit Basic interface */
     CU_basic_set_mode(CU_BRM_VERBOSE);
