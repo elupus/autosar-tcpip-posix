@@ -437,6 +437,10 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
         goto cleanup;
     }
 
+    if (Tcp_SetNonBlocking(fd) != E_OK) {
+        goto cleanup;
+    }
+
     if (TcpIp_SoAdGetSocket(s->domain, s->protocol, &id2) != E_OK) {
         goto cleanup;
     }
