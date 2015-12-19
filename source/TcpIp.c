@@ -76,8 +76,8 @@ typedef struct {
     TcpIp_OsSocketType    fd;
 } TcpIp_SocketType;
 
-TcpIp_SocketType      TcpIp_Sockets[TCPIP_MAX_SOCKETS];
-struct pollfd         TcpIp_PollFds[TCPIP_MAX_SOCKETS];
+TcpIp_SocketType      TcpIp_Sockets[TCPIP_CFG_MAX_SOCKETS];
+struct pollfd         TcpIp_PollFds[TCPIP_CFG_MAX_SOCKETS];
 
 static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateType state);
 
@@ -211,7 +211,7 @@ void TcpIp_Init(const TcpIp_ConfigType* config)
     TcpIp_SocketIdType id;
     TcpIp_Config = config;
 
-    for (id = 0u; id < TCPIP_MAX_SOCKETS; ++id) {
+    for (id = 0u; id < TCPIP_CFG_MAX_SOCKETS; ++id) {
         TcpIp_InitSocket(id);
     }
 }
@@ -445,11 +445,97 @@ Std_ReturnType TcpIp_TcpListen(
     return res;
 }
 
+/**
+ * @brief This service transmits data via UDP to a remote node. The transmission of the
+ *        data is immediately performed with this function call by forwarding it to EthIf.
+ * @warn  Reentrant for different SocketIds. Non reentrant for the same SocketId.
+ * @info  Synchronous
+ *
+ * @param[in] id     Socket identifier of the related local socket resource.
+ * @param[in] data   Pointer to a linear buffer of TotalLength bytes containing the
+ *                   data to be transmitted.
+ *                   In case DataPtr is a NULL_PTR, TcpIp shall retrieve data from
+ *                   upper layer via callback <Up>_CopyTxData().
+ * @param[in] remote IP address and port of the remote host to transmit to.
+ * @param[in] len    indicates the payload size of the UDP datagram.
+ */
+Std_ReturnType TcpIp_UdpTransmit(
+        TcpIp_SocketIdType        id,
+        const uint8*              data,
+        const TcpIp_SockAddrType* remote,
+        uint16                    len
+    )
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    int v;
+    Std_ReturnType res;
+    struct sockaddr_storage  addr;
+
+    if (remote->domain != s->domain) {
+        TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_PROTOCOL);
+        return E_NOT_OK;
+    }
+
+    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, remote) != E_OK) {
+        TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_INV_ARG);
+        return E_NOT_OK;
+    }
+
+    if (TcpIp_SetBlockingState(s->fd, TRUE) != E_OK) {
+        return E_NOT_OK;
+    }
+
+    while (len > 0u) {
+        uint8*  src;
+        uint16  src_len;
+        if (data) {
+            src     = data;
+            src_len = len;
+        } else {
+            uint8 buf[128];
+            SoAd_CopyTxData
+        }
+
+        v = sendto(s->fd, src, src_len, 0, (struct sockaddr *)&addr, addr.ss_len);
+
+        if (v == -1) {
+            if (errno == EMSGSIZE) {
+                TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
+            }
+            return E_NOT_OK;
+        } else if (v != src_len) {
+            TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
+            return E_NOT_OK;
+        } else {
+            len -= v;
+        }
+    }
+
+    if (data) {
+        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, addr.ss_len);
+
+        if (v == -1) {
+            if (errno == EMSGSIZE) {
+                TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
+            }
+            return E_NOT_OK;
+        } else if (v != len) {
+            TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
+            return E_NOT_OK;
+        }
+    } else {
+
+
+
+    }
+    return E_NOT_OK;
+}
+
 Std_ReturnType TcpIp_TcpTransmit(
-        TcpIp_SocketIdType  SocketId,
-        const uint8*        DataPtr,
-        uint32              AvailableLength,
-        boolean             ForceRetrieve
+        TcpIp_SocketIdType  id,
+        const uint8*        data,
+        uint32              aailable,
+        boolean             force
     )
 {
     return E_NOT_OK;
@@ -460,12 +546,12 @@ static Std_ReturnType TcpIp_GetFreeSocket(TcpIp_SocketIdType* socketid)
     TcpIp_SocketIdType index;
     Std_ReturnType     res;
 
-    for (index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
+    for (index = 0u; index < TCPIP_CFG_MAX_SOCKETS; ++index) {
         if (TcpIp_Sockets[index].state == TCPIP_SOCKET_STATE_UNUSED) {
             break;
         }
     }
-    if (index < TCPIP_MAX_SOCKETS) {
+    if (index < TCPIP_CFG_MAX_SOCKETS) {
         *socketid = index;
         res = E_OK;
     } else {
@@ -661,12 +747,12 @@ void TcpIp_MainFunction(void)
     TcpIp_SocketIdType index;
     int                res;
 
-    for (index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
+    for (index = 0u; index < TCPIP_CFG_MAX_SOCKETS; ++index) {
         TcpIp_PollFds[index].fd      = TcpIp_Sockets[index].fd;
         TcpIp_PollFds[index].revents = 0;
     }
 
-    res = poll(TcpIp_PollFds, TCPIP_MAX_SOCKETS, 0);
+    res = poll(TcpIp_PollFds, TCPIP_CFG_MAX_SOCKETS, 0);
     if (res > 0) {
         /* something to do */
     } else if (res < 0) {
@@ -674,7 +760,7 @@ void TcpIp_MainFunction(void)
     } else {
         /* nothing to do */
     }
-    for (index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
+    for (index = 0u; index < TCPIP_CFG_MAX_SOCKETS; ++index) {
         TcpIp_SocketState_All(index);
     }
 }

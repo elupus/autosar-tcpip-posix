@@ -23,10 +23,10 @@
 
 struct suite_state {
     TcpIp_DomainType   domain;
-    boolean            connected[TCPIP_MAX_SOCKETS];
+    boolean            connected[TCPIP_CFG_MAX_SOCKETS];
     TcpIp_SocketIdType id;
     TcpIp_SocketIdType accept_id;
-    TcpIp_EventType    events[TCPIP_MAX_SOCKETS];
+    TcpIp_EventType    events[TCPIP_CFG_MAX_SOCKETS];
 };
 
 struct suite_state suite_state;
@@ -91,7 +91,7 @@ int suite_init_v6(void)
 int suite_clean(void)
 {
     TcpIp_SocketIdType index;
-    for(index = 0u; index < TCPIP_MAX_SOCKETS; ++index) {
+    for(index = 0u; index < TCPIP_CFG_MAX_SOCKETS; ++index) {
         TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
     }
     return 0;
