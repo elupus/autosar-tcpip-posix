@@ -15,7 +15,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
 #ifndef TCPIP_H_
 #define TCPIP_H_
 
@@ -143,6 +142,12 @@ typedef enum {
     TCPIP_E_PHYS_ADDR_MISS,
 } TcpIp_ReturnType;
 
+/**
+ * @brief Development Errors
+ * @req SWS_TCPIP_00042
+ * @{
+ */
+
 /** @brief API service called before initializing the module */
 #define TCPIP_E_NOTINIT        0x01u
 
@@ -181,6 +186,10 @@ typedef enum {
 
 /** @brief Invalid configuration set selection */
 #define TCPIP_E_INIT_FAILED    0x0Fu
+
+/**
+ * @}
+ */
 
 /**
  * @brief Service identifier
