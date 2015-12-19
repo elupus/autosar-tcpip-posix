@@ -150,6 +150,10 @@ void TcpIp_Init(const TcpIp_ConfigType* config)
  *                         resources.
  * @return    E_OK:     The request has been accepted
  *            E_NOT_OK: The request has not been accepted.
+ *
+ * @req SWS_TCPIP_00017
+ * @req SWS_TCPIP_00109
+ * @req SWS_TCPIP_00110
  */
 Std_ReturnType TcpIp_Close(
         TcpIp_SocketIdType          id,
@@ -209,6 +213,9 @@ Std_ReturnType TcpIp_Close(
  *                        TCPIP_PORT_ANY, the TCP/IP stack shall choose the local port
  *                        automatically from the range 49152 to 65535 and shall update the
  *                        parameter to the chosen value.
+ *
+ * @req SWS_TCPIP_00015
+ *
  */
 Std_ReturnType TcpIp_Bind(
         TcpIp_SocketIdType          id,
@@ -225,7 +232,8 @@ Std_ReturnType TcpIp_Bind(
     socklen_t len;
 
     if (local_addr != TCPIP_LOCALADDRID_ANY) {
-        /* TODO */
+        /** @req SWS_TCPIP_00111-TODO */
+        /** @req SWS_TCPIP_00147-TODO */
         res = E_NOT_OK;
         goto done;
     }
@@ -243,9 +251,9 @@ Std_ReturnType TcpIp_Bind(
         goto done;
     }
 
-    /** @req SWS_TCPIP_00111 */
     if (bind(s->fd, (const struct sockaddr*)&addr, len) != 0) {
         if (errno == EADDRINUSE) {
+            /** @req SWS_TCPIP_00146 */
             TCPIP_DET_ERROR(TCPIP_API_BIND, TCPIP_E_ADDRINUSE);
         }
         res = E_NOT_OK;
@@ -273,6 +281,19 @@ done:
     return res;
 }
 
+/**
+ * @brief By this API service the TCP/IP stack is requested to establish a TCP connection to the configured peer.
+ * @warn Reentrant for different SocketIds. Non reentrant for the same SocketId.
+ * @info Asynchronous
+ * @req  SWS_TCPIP_00022
+ *
+ * @param[in] id     Socket identifier of the related local socket resource.
+ * @param[in] remote IP address and port of the remote host to connect to.
+ * @return E_OK:     The request has been accepted
+ *         E_NOT_OK: The request has not been accepted, e.g. connection
+ *                   is already established or no route to destination specified by
+ *                   remoteAddrPtr found.
+ */
 Std_ReturnType TcpIp_TcpListen(
         TcpIp_SocketIdType id,
         uint16             channels
