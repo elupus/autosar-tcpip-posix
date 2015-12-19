@@ -272,6 +272,12 @@ typedef struct {
     uint32           addr[4];
 } TcpIp_SockAddrInet6Type;
 
+typedef union {
+    TcpIp_SockAddrType      base;
+    TcpIp_SockAddrInetType  inet;
+    TcpIp_SockAddrInet6Type inet6;
+} TcpIp_SockAddrStorageType;
+
 /**
  * @brief socket identifier type for unique identification of a TcpIp stack socket.
  *        TCPIP_SOCKETID_INVALID shall specify an invalid socket handle.

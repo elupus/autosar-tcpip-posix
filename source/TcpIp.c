@@ -123,6 +123,61 @@ static sint8 TcpIp_GetBsdDomainFromDomain(TcpIp_DomainType domain)
     return res;
 }
 
+static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage* trg, const TcpIp_SockAddrType* src)
+{
+    Std_ReturnType res;
+    memset(trg, 0, sizeof(*trg));
+    if (src->domain == TCPIP_AF_INET) {
+        TcpIp_SockAddrInetType* inet = (TcpIp_SockAddrInetType*)src;
+        struct sockaddr_in*     in   = (struct sockaddr_in*)trg;
+        in->sin_family      = AF_INET;
+        in->sin_port        = inet->port;
+        in->sin_len         = sizeof(*in);
+        in->sin_addr.s_addr = inet->addr[0];
+        res = E_OK;
+    } else if (src->domain == TCPIP_AF_INET6) {
+        TcpIp_SockAddrInet6Type* inet = (TcpIp_SockAddrInet6Type*)src;
+        struct sockaddr_in6*     in6  = (struct sockaddr_in6*)trg;
+        in6->sin6_family = AF_INET6;
+        in6->sin6_port   = inet->port;
+        in6->sin6_addr.__u6_addr.__u6_addr32[0] = inet->addr[0];
+        in6->sin6_addr.__u6_addr.__u6_addr32[1] = inet->addr[1];
+        in6->sin6_addr.__u6_addr.__u6_addr32[2] = inet->addr[2];
+        in6->sin6_addr.__u6_addr.__u6_addr32[3] = inet->addr[3];
+        in6->sin6_len    = sizeof(*in6);
+        res = E_OK;
+    } else {
+        res = E_NOT_OK;
+    }
+    return res;
+}
+
+
+static Std_ReturnType TcpIp_GetSockaddrFromBsdSocketAddr(TcpIp_SockAddrStorageType* trg, const struct sockaddr* src)
+{
+    Std_ReturnType res;
+    memset(trg, 0, sizeof(*trg));
+    if (src->sa_family == AF_INET) {
+        struct sockaddr_in*     in   = (struct sockaddr_in*)src;
+        trg->inet.domain  = TCPIP_AF_INET;
+        trg->inet.port    = in->sin_port;
+        trg->inet.addr[0] = in->sin_addr.s_addr;
+        res = E_OK;
+    } else if (src->sa_family == AF_INET6) {
+        struct sockaddr_in6*     in6  = (struct sockaddr_in6*)trg;
+        trg->inet6.domain  = TCPIP_AF_INET6;
+        trg->inet6.port    = in6->sin6_port;
+        trg->inet6.addr[0] = in6->sin6_addr.__u6_addr.__u6_addr32[0];
+        trg->inet6.addr[1] = in6->sin6_addr.__u6_addr.__u6_addr32[1];
+        trg->inet6.addr[2] = in6->sin6_addr.__u6_addr.__u6_addr32[2];
+        trg->inet6.addr[3] = in6->sin6_addr.__u6_addr.__u6_addr32[3];
+        res = E_OK;
+    } else {
+        res = E_NOT_OK;
+    }
+    return res;
+}
+
 
 /**
  * @brief This service initializes the TCP/IP Stack.
@@ -302,10 +357,7 @@ Std_ReturnType TcpIp_TcpConnect(
     TcpIp_SocketType* s = &TcpIp_Sockets[id];
     Std_ReturnType    res;
 
-    union {
-        struct sockaddr_in  in;
-        struct sockaddr_in6 in6;
-    } addr = {};
+    struct sockaddr_storage  addr;
     socklen_t len;
 
     TCPIP_DET_CHECK_RET(remote != NULL_PTR, TCPIP_API_TCPCONNECT, TCPIP_E_PARAM_POINTER);
@@ -314,25 +366,11 @@ Std_ReturnType TcpIp_TcpConnect(
         return E_NOT_OK;
     }
 
-    if (remote->domain == TCPIP_AF_INET) {
-        TcpIp_SockAddrInetType* inet = (TcpIp_SockAddrInetType*)remote;
-        addr.in.sin_family   = AF_INET;
-        addr.in.sin_port     = inet->port;
-        len = sizeof(addr.in);
-    } else if (remote->domain == TCPIP_AF_INET6) {
-        TcpIp_SockAddrInet6Type* inet = (TcpIp_SockAddrInet6Type*)remote;
-        addr.in6.sin6_family = AF_INET6;
-        addr.in6.sin6_port   = inet->port;
-        inet->addr[0] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[0];
-        inet->addr[1] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[1];
-        inet->addr[2] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[2];
-        inet->addr[3] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[3];
-        len = sizeof(addr.in6);
-    } else {
+    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, remote) != E_OK) {
         return E_NOT_OK;
     }
 
-    int v = connect(s->fd, (const struct sockaddr*)&addr, len);
+    int v = connect(s->fd, (const struct sockaddr*)&addr, addr.ss_len);
     if (v != 0) {
         v = errno;
     }
@@ -487,18 +525,10 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
     int fd                 = INVALID_SOCKET;
 
     socklen_t len;
-    union {
-        struct sockaddr_storage storage;
-        struct sockaddr_in      in;
-        struct sockaddr_in6     in6;
-    } addr;
-    len = sizeof(sizeof(addr));
+    struct sockaddr_storage addr;
+    len = sizeof(addr);
 
-    union {
-        TcpIp_SockAddrType      base;
-        TcpIp_SockAddrInetType  inet;
-        TcpIp_SockAddrInet6Type inet6;
-    } data = {0};
+    TcpIp_SockAddrStorageType data;
 
     fd = accept(s->fd, (struct sockaddr*)&addr, &len);
     if (fd == INVALID_SOCKET) {
@@ -513,19 +543,7 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
         goto cleanup;
     }
 
-    if (addr.storage.ss_family == AF_INET) {
-        data.inet.addr[0] = addr.in.sin_addr.s_addr;
-        data.inet.port    = addr.in.sin_port;
-        data.inet.domain  = TCPIP_AF_INET;
-
-    } else if (addr.storage.ss_family == AF_INET6)  {
-        data.inet6.addr[0] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[0];
-        data.inet6.addr[1] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[1];
-        data.inet6.addr[2] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[2];
-        data.inet6.addr[3] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[3];
-        data.inet6.port    = addr.in6.sin6_port;
-        data.inet6.domain  = TCPIP_AF_INET6;
-    } else {
+    if (TcpIp_GetSockaddrFromBsdSocketAddr(&data, (struct sockaddr*)&addr) != E_OK) {
         goto cleanup;
     }
 
