@@ -178,7 +178,27 @@ static Std_ReturnType TcpIp_GetSockaddrFromBsdSocketAddr(TcpIp_SockAddrStorageTy
     return res;
 }
 
-
+static Std_ReturnType TcpIp_SetBlockingState(TcpIp_OsSocketType fd, boolean blocking)
+{
+    Std_ReturnType     res;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        res = E_NOT_OK;
+    } else {
+        if (blocking) {
+            flags &= ~O_NONBLOCK;
+        } else {
+            flags |= O_NONBLOCK;
+        }
+        flags = fcntl(fd, F_SETFL, flags);
+        if (flags < 0) {
+            res = E_NOT_OK;
+        } else {
+            res = E_OK;
+        }
+    }
+    return res;
+}
 /**
  * @brief This service initializes the TCP/IP Stack.
  *
@@ -370,6 +390,10 @@ Std_ReturnType TcpIp_TcpConnect(
         return E_NOT_OK;
     }
 
+    if (TcpIp_SetBlockingState(s->fd, FALSE) != E_OK) {
+        return E_NOT_OK;
+    }
+
     int v = connect(s->fd, (const struct sockaddr*)&addr, addr.ss_len);
     if (v != 0) {
         v = errno;
@@ -450,23 +474,6 @@ static Std_ReturnType TcpIp_GetFreeSocket(TcpIp_SocketIdType* socketid)
     return res;
 }
 
-static Std_ReturnType Tcp_SetNonBlocking(TcpIp_OsSocketType fd)
-{
-    Std_ReturnType     res;
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) {
-        res = E_NOT_OK;
-    } else {
-        flags = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-        if (flags < 0) {
-            res = E_NOT_OK;
-        } else {
-            res = E_OK;
-        }
-    }
-    return res;
-}
-
 Std_ReturnType TcpIp_SoAdGetSocket(
         TcpIp_DomainType    domain,
         TcpIp_ProtocolType  protocol,
@@ -488,7 +495,6 @@ Std_ReturnType TcpIp_SoAdGetSocket(
             s->state    = TCPIP_SOCKET_STATE_ALLOCATED;
             s->protocol = protocol;
             s->domain   = domain;
-            res = Tcp_SetNonBlocking(s->fd);
         } else {
             res = E_NOT_OK;
         }
@@ -532,10 +538,6 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
 
     fd = accept(s->fd, (struct sockaddr*)&addr, &len);
     if (fd == INVALID_SOCKET) {
-        goto cleanup;
-    }
-
-    if (Tcp_SetNonBlocking(fd) != E_OK) {
         goto cleanup;
     }
 
