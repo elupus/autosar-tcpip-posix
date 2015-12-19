@@ -220,6 +220,7 @@ Std_ReturnType TcpIp_Bind(
         goto done;
     }
 
+    /** @req SWS_TCPIP_00111 */
     if (bind(s->fd, (const struct sockaddr*)&addr, len) != 0) {
         res = E_NOT_OK;
         goto done;
