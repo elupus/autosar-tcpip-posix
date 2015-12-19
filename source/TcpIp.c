@@ -35,15 +35,15 @@
 #if(TCPIP_ENABLE_DEVELOPMENT_ERROR == STD_ON)
 #include "Det.h"
 #define TCPIP_DET_ERROR(api, error) Det_ReportError(TCPIP_MODULEID, TCPIP_INSTANCEID, api, error)
-#define TCPIP_DET_CHECK_RET(check, api, error) \
-    do {                                       \
-        if (!(check)) {                        \
-            Det_ReportError(TCPIP_MODULEID     \
-                          , TCPIP_INSTANCEID   \
-                          , api                \
-                          , error);            \
-            return E_NOT_OK;                   \
-        }                                      \
+#define TCPIP_DET_CHECK_RET(check, api, error)       \
+    do {                                             \
+        if (!(check)) {                              \
+            (void)Det_ReportError(TCPIP_MODULEID     \
+                                , TCPIP_INSTANCEID   \
+                                , api                \
+                                , error);            \
+            return E_NOT_OK;                         \
+        }                                            \
     } while(0)
 
 #else
