@@ -126,6 +126,46 @@ typedef enum {
     TCPIP_E_PHYS_ADDR_MISS,
 } TcpIp_ReturnType;
 
+/** @brief API service called before initializing the module */
+#define TCPIP_E_NOTINIT        0x01u
+
+/** @brief API service called with NULL pointer */
+#define TCPIP_E_PARAM_POINTER  0x02u
+
+/** @brief Invalid argument */
+#define TCPIP_E_INV_ARG        0x03u
+
+/** @brief no buffer space available */
+#define TCPIP_E_NOBUFS         0x04u
+
+/** @brief Message to long */
+#define TCPIP_E_MSGSIZE        0x07u
+
+/** @brief Protocol wrong type for socket */
+#define TCPIP_E_PROTOTYPE      0x08u
+
+/** @brief Address already in use */
+#define TCPIP_E_ADDRINUSE      0x09u
+
+/** @brief Can't assignt requested address */
+#define TCPIP_E_ADDRNOTAVAIL   0x0Au
+
+/** @brief Socket is already connected */
+#define TCPIP_E_ISCONN         0x0Bu
+
+/** @brief Socket is not connected */
+#define TCPIP_E_NOTCONN        0x0Cu
+
+/** @brief Protocol is not available */
+#define TCPIP_E_NOPROTOOPT     0x0Du
+
+/** @brief Address family not supported by protocol family */
+#define TCPIP_E_AFNOSUPPORT    0x0Eu
+
+/** @brief Invalid configuration set selection */
+#define TCPIP_E_INIT_FAILED    0x0Fu
+
+
 /**
  * @brief Configuration data structure of the TcpIp module.
  * @req   SWS_TCPIP_00067
