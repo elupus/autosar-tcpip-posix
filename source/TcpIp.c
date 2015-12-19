@@ -294,23 +294,6 @@ done:
  *                   is already established or no route to destination specified by
  *                   remoteAddrPtr found.
  */
-Std_ReturnType TcpIp_TcpListen(
-        TcpIp_SocketIdType id,
-        uint16             channels
-    )
-{
-    TcpIp_SocketType* s = &TcpIp_Sockets[id];
-    Std_ReturnType    res;
-
-    if (listen(s->fd, channels) == 0) {
-        res = E_OK;
-        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_LISTEN);
-    } else {
-        res = E_NOT_OK;
-    }
-    return res;
-}
-
 Std_ReturnType TcpIp_TcpConnect(
         TcpIp_SocketIdType          id,
         const TcpIp_SockAddrType*   remote
@@ -363,6 +346,41 @@ Std_ReturnType TcpIp_TcpConnect(
     }
 
     return E_OK;
+}
+
+/**
+ * @brief By this API service the TCP/IP stack is requested to listen on the TCP socket specified by the socket identifier.
+ * @warn Reentrant for different SocketIds. Non reentrant for the same SocketId.
+ * @info Asynchronous
+ * @req  SWS_TCPIP_00023
+ *
+ * @param[in] id       Socket identifier of the related local socket resource.
+ * @param[in) channels Maximum number of new parallel connections established on
+ *                     this listen connection.
+ *
+ * @return E_OK:     The request has been accepted
+ *         E_NOT_OK: Maximum number of new parallel connections established on
+ *                   this listen connection.
+ */
+Std_ReturnType TcpIp_TcpListen(
+        TcpIp_SocketIdType id,
+        uint16             channels
+    )
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    Std_ReturnType    res;
+
+    /**
+     * @req SWS_TCPIP_00113
+     * @req SWS_TCPIP_00114
+     */
+    if (listen(s->fd, channels) == 0) {
+        res = E_OK;
+        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_LISTEN);
+    } else {
+        res = E_NOT_OK;
+    }
+    return res;
 }
 
 Std_ReturnType TcpIp_TcpTransmit(
