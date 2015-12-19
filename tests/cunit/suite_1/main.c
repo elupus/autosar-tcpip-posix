@@ -138,13 +138,6 @@ void suite_test_loopback_connect(void)
 {
     uint16 port;
     TcpIp_SocketIdType listen, connect;
-    struct in_addr     loopback;
-
-    if (suite_state.domain == TCPIP_AF_INET) {
-        inet_pton(AF_INET, "127.0.0.1", &loopback);
-    } else {
-        inet_pton(AF_INET, "::1", &loopback);
-    }
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, &listen), E_OK);
 
@@ -154,16 +147,34 @@ void suite_test_loopback_connect(void)
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, &connect), E_OK);
 
-    TcpIp_SockAddrInetType inet = {};
-    inet.domain  = TCPIP_AF_INET;
-    inet.port    = port;
-    inet.addr[0] = loopback.s_addr;
+    union {
+        TcpIp_SockAddrType      base;
+        TcpIp_SockAddrInetType  inet;
+        TcpIp_SockAddrInet6Type inet6;
+    } data = {0};
+
+    if (suite_state.domain == TCPIP_AF_INET) {
+        struct in_addr     loopback;
+        inet_pton(AF_INET, "127.0.0.1", &loopback);
+        data.inet.domain  = suite_state.domain;
+        data.inet.port    = port;
+        data.inet.addr[0] = loopback.s_addr;
+    } else {
+        struct in6_addr     loopback;
+        inet_pton(AF_INET6, "::1", &loopback);
+        data.inet6.domain  = suite_state.domain;
+        data.inet6.port    = port;
+        data.inet6.addr[0] = loopback.__u6_addr.__u6_addr32[0];
+        data.inet6.addr[1] = loopback.__u6_addr.__u6_addr32[1];
+        data.inet6.addr[2] = loopback.__u6_addr.__u6_addr32[2];
+        data.inet6.addr[3] = loopback.__u6_addr.__u6_addr32[3];
+    }
 
     suite_state.connected[connect]        = FALSE;
     suite_state.events[connect]           = -1;
     suite_state.accept_id                 = listen;
 
-    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(connect, &inet.base), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(connect, &data.base), E_OK);
 
     for (int i = 0; i < 1000 && ( (suite_state.connected[connect]  != TRUE)
                              ||   (suite_state.accept_id == listen)); ++i) {
