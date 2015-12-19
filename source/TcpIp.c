@@ -68,7 +68,19 @@ static sint8 TcpIp_GetBsdTypeFromProtocol(TcpIp_ProtocolType  protocol)
 
 static sint8 TcpIp_GetBsdDomainFromDomain(TcpIp_DomainType domain)
 {
-    return (sint8)domain;
+    sint8 res;
+
+    switch(domain) {
+        case TCPIP_AF_INET:
+            res = AF_INET;
+            break;
+        case TCPIP_AF_INET6:
+            res = AF_INET6;
+            break;
+        default:
+            res = 0;
+    }
+    return res;
 }
 
 
@@ -135,6 +147,29 @@ Std_ReturnType TcpIp_Close(
     return res;
 }
 
+/**
+ * @brief By this API service the TCP/IP stack is requested to bind a UDP or TCP socket to a local resource.
+ * @param[in] id          Socket identifier of the related local socket resource.
+ * @param[in] local_addr  IP address identifier representing the local IP address and EthIf
+ *                        controller to bind the socket to.
+ *                        Note: to listen to all EthIf controller, TCPIP_LOCALADDRID_ANY
+ *                              has to be specified as LocalAddrId.
+ *                        Note: to listen on any IP addresss of a EthIf controller, the
+ *                              configuration parameter TcpIpStaticIpAddress referenced by
+ *                              LocalAddrId must be set to "ANY". The remote IP address of an
+ *                              incoming packet has no effect then.
+ *                        In case the socket shall be used as client socket, the IP address
+ *                              and EthIf controller represented by LocalAddrId is used for
+ *                              transmission.
+ *                        Note: for an automatic selection of the Local IP address and EthIf
+ *                              Controller, TCPIP_LOCALADDRID_ANY has to be specified as
+ *                              LocalAddrId
+ * @param[in,out] port    Pointer to memory where the local port to which the socket shall
+ *                        be bound is specified. In case the parameter is specified as
+ *                        TCPIP_PORT_ANY, the TCP/IP stack shall choose the local port
+ *                        automatically from the range 49152 to 65535 and shall update the
+ *                        parameter to the chosen value.
+ */
 Std_ReturnType TcpIp_Bind(
         TcpIp_SocketIdType          id,
         TcpIp_LocalAddrIdType       local_addr,
@@ -143,42 +178,54 @@ Std_ReturnType TcpIp_Bind(
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[id];
     Std_ReturnType    res;
+    union {
+        struct sockaddr_in  in;
+        struct sockaddr_in6 in6;
+    } addr = {};
+    socklen_t len;
 
     if (local_addr != TCPIP_LOCALADDRID_ANY) {
         /* TODO */
         res = E_NOT_OK;
-        goto TcpIp_Bind_Exit;
+        goto done;
     }
 
     if (s->domain == TCPIP_AF_INET) {
-        int v;
-        struct sockaddr_in addr = {};
-        socklen_t len;
-        addr.sin_family = AF_INET;
-        addr.sin_port   = *port;
-        if (bind(s->fd, (const struct sockaddr*)&addr, sizeof(addr)) != 0) {
-            res = E_NOT_OK;
-            goto TcpIp_Bind_Exit;
-        }
-
-        len = sizeof(addr);
-        if (getsockname(s->fd, (struct sockaddr*)&addr, &len) != 0) {
-            res = E_NOT_OK;
-            goto TcpIp_Bind_Exit;
-        }
-
-        *port = addr.sin_port;
-        res = E_OK;
-        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_BOUND);
-
+        addr.in.sin_family   = AF_INET;
+        addr.in.sin_port     = *port;
+        len = sizeof(addr.in);
     } else if (s->domain == TCPIP_AF_INET6) {
-        /* TODO */
-        res = E_NOT_OK;
+        addr.in6.sin6_family = AF_INET6;
+        addr.in6.sin6_port   = *port;
+        len = sizeof(addr.in6);
     } else {
         res = E_NOT_OK;
-        goto TcpIp_Bind_Exit;
+        goto done;
     }
-TcpIp_Bind_Exit:
+
+    if (bind(s->fd, (const struct sockaddr*)&addr, len) != 0) {
+        res = E_NOT_OK;
+        goto done;
+    }
+
+    len = sizeof(addr);
+    if (getsockname(s->fd, (struct sockaddr*)&addr, &len) != 0) {
+        res = E_NOT_OK;
+        goto done;
+    }
+    if (addr.in.sin_family == AF_INET) {
+        *port = addr.in.sin_port;
+    } else if (addr.in6.sin6_family == AF_INET6) {
+        *port = addr.in6.sin6_port;
+    } else {
+        res = E_NOT_OK;
+        goto done;
+    }
+
+    res = E_OK;
+    TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_BOUND);
+
+done:
     return res;
 }
 
@@ -207,43 +254,48 @@ Std_ReturnType TcpIp_TcpConnect(
     TcpIp_SocketType* s = &TcpIp_Sockets[id];
     Std_ReturnType    res;
 
+    union {
+        struct sockaddr_in  in;
+        struct sockaddr_in6 in6;
+    } addr = {};
+    socklen_t len;
+
     if (remote->domain != s->domain) {
         return E_NOT_OK;
     }
 
-    if (s->domain == TCPIP_AF_INET) {
-        int v;
-        struct sockaddr_in      addr = {};
+    if (remote->domain == TCPIP_AF_INET) {
         TcpIp_SockAddrInetType* inet = (TcpIp_SockAddrInetType*)remote;
-        addr.sin_family      = AF_INET;
-        addr.sin_port        = inet->port;
-        addr.sin_addr.s_addr = inet->addr[0];
-        addr.sin_len         = sizeof(addr);
-        v = connect(s->fd, (const struct sockaddr*)&addr, sizeof(addr));
-        if (v != 0) {
-            v = errno;
-        }
-
-        if (v == 0) {
-            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTED);
-            res = E_OK;
-        } else if(v == EINPROGRESS) {
-            res = E_OK;
-            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTING);
-        } else {
-            res = E_NOT_OK;
-        }
-
+        addr.in.sin_family   = AF_INET;
+        addr.in.sin_port     = inet->port;
+        len = sizeof(addr.in);
     } else if (remote->domain == TCPIP_AF_INET6) {
-
-        /* TODO */
-        res = E_NOT_OK;
+        TcpIp_SockAddrInet6Type* inet = (TcpIp_SockAddrInet6Type*)remote;
+        addr.in6.sin6_family = AF_INET6;
+        addr.in6.sin6_port   = inet->port;
+        inet->addr[0] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[0];
+        inet->addr[1] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[1];
+        inet->addr[2] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[2];
+        inet->addr[3] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[3];
+        len = sizeof(addr.in6);
     } else {
-        res = E_NOT_OK;
-        goto TcpIp_Bind_Exit;
+        return E_NOT_OK;
     }
-TcpIp_Bind_Exit:
-    return res;
+
+    int v = connect(s->fd, (const struct sockaddr*)&addr, len);
+    if (v != 0) {
+        v = errno;
+    }
+
+    if (v == 0) {
+        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTED);
+    } else if(v == EINPROGRESS) {
+        TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_CONNECTING);
+    } else {
+        return E_NOT_OK;
+    }
+
+    return E_OK;
 }
 
 Std_ReturnType TcpIp_TcpTransmit(
@@ -353,12 +405,14 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
     union {
         struct sockaddr_storage storage;
         struct sockaddr_in      in;
+        struct sockaddr_in6     in6;
     } addr;
     len = sizeof(sizeof(addr));
 
     union {
-        TcpIp_SockAddrType     base;
-        TcpIp_SockAddrInetType inet;
+        TcpIp_SockAddrType      base;
+        TcpIp_SockAddrInetType  inet;
+        TcpIp_SockAddrInet6Type inet6;
     } data = {0};
 
     fd = accept(s->fd, (struct sockaddr*)&addr, &len);
@@ -376,8 +430,12 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
         data.inet.domain  = TCPIP_AF_INET;
 
     } else if (addr.storage.ss_family == AF_INET6)  {
-        /* TODO IPV6 support */
-        goto cleanup;
+        data.inet6.addr[0] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[0];
+        data.inet6.addr[1] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[1];
+        data.inet6.addr[2] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[2];
+        data.inet6.addr[3] = addr.in6.sin6_addr.__u6_addr.__u6_addr32[3];
+        data.inet6.port    = addr.in6.sin6_port;
+        data.inet6.domain  = TCPIP_AF_INET6;
     } else {
         goto cleanup;
     }

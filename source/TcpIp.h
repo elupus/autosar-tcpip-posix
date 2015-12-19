@@ -158,6 +158,22 @@ typedef struct {
     uint32           addr[1];
 } TcpIp_SockAddrInetType;
 
+
+/**
+ * @brief This structure defines an IPv4 address type which can be derived from the generic
+ *        address structure via cast.
+ * @req   SWS_TCPIP_00013
+ */
+typedef struct {
+    union {
+        TcpIp_SockAddrType base;
+        TcpIp_DomainType   domain;
+    };
+
+    uint16           port;
+    uint32           addr[4];
+} TcpIp_SockAddrInet6Type;
+
 /**
  * @brief socket identifier type for unique identification of a TcpIp stack socket.
  *        TCPIP_SOCKETID_INVALID shall specify an invalid socket handle.
