@@ -164,7 +164,10 @@ typedef enum {
 #define TCPIP_E_MSGSIZE        0x07u
 
 /** @brief Protocol wrong type for socket */
-#define TCPIP_E_PROTOTYPE      0x08u
+#define TCPIP_E_PROTOCOL       0x08u
+
+/** @brief Compatibility with AUTOSAR invalid doc */
+#define TCPIP_E_PROTOTYPE      TCPIP_E_PROTOCOL
 
 /** @brief Address already in use */
 #define TCPIP_E_ADDRINUSE      0x09u
