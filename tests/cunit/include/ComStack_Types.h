@@ -1,16 +1,21 @@
-/*******************************************************************
- * File Creator:    Alborz Sedaghat Amoli - alborz.sedaghat@qrtech.se
- * 					Björn Siby - bjorn.siby@qrtech.se
- * File Created: 	2008-11-24
- * Description:
- *      See Autosar documentation:
- *      Specification of DIO Driver V2.2.2
- * $History$:
+/*
+ * Copyright (c) 2012 QRTECH AB Gothenburg Sweden. All Rights Reserved.
  *
- * Version 0.5 2011-02-07 Edited by Robert Lavin for HVFE.
+ * This document is provided to you in a non-exclusive agreement, and
+ * shall not without QRTECH AB’s written permission be copied, imparted
+ * to a third party or be used for any other unauthorized purpose.
+ * QRTECH retain the right to reuse or re-license for other purposes.
  *
- *******************************************************************/
-
+ * The document is provided "AS IS", WITHOUT WARRANTY and is only
+ * supported by QRTECH in its complete original distribution.
+ *
+ * QRTECH AB  (http://www.qrtech.se)
+ * Mejerigatan 1
+ * 412 76 Göteborg
+ * SWEDEN
+ * Tel: +46 31 773 76 00
+ *
+ */
 
 #ifndef COMSTACK_TYPES_H_
 #define COMSTACK_TYPES_H_
