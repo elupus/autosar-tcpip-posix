@@ -182,6 +182,38 @@ typedef enum {
 /** @brief Invalid configuration set selection */
 #define TCPIP_E_INIT_FAILED    0x0Fu
 
+/**
+ * @brief Service identifier
+ * @{
+ */
+#define TCPIP_API_INIT                         0x01u
+#define TCPIP_API_GETVERSIONINFO               0x02u
+#define TCPIP_API_BIND                         0x05u
+#define TCPIP_API_TCPCONNECT                   0x06u
+#define TCPIP_API_TCPLISTEN                    0x07u
+#define TCPIP_API_TCPRECEIVED                  0x08u
+#define TCPIP_API_REQUESTCOMMODE               0x09u
+#define TCPIP_API_REQUESTADDRASSIGNMENT        0x0Au
+#define TCPIP_API_RELEASEIPADDRASSIGNMENT      0x0Bu
+#define TCPIP_API_RESETIPASSIGNMENT            0x1Bu
+#define TCPIP_API_ICMPTRANSMIT                 0x0Cu
+#define TCPIP_API_ICMPV6TRANSMIT               0x18u
+#define TCPIP_API_DHCPREADOPTION               0x0Du
+#define TCPIP_API_DHCPV6READOPTION             0x19u
+#define TCPIP_API_DHCPWRITEOPTION              0x0Eu
+#define TCPIP_API_DHCPV6WRITEOPTION            0x1Au
+#define TCPIP_API_CHANGEPARAMETER              0x0Fu
+#define TCPIP_API_GETIPADDR                    0x10u
+#define TCPIP_API_GETPHYSADDR                  0x01u
+#define TCPIP_API_GETREMOTEPHYSADDR            0x16u
+#define TCPIP_API_UDPTRANSMIT                  0x00u
+#define TCPIP_API_TCPTRANSMIT                  0x13u
+#define TCPIP_API_RXINDICATION                 0x04u
+#define TCPIP_API_MAINFUNCTION                 0x15u
+#define TCPIP_API_GETSOCKET                    0x03u
+/**
+ * @}
+ */
 
 /**
  * @brief Configuration data structure of the TcpIp module.

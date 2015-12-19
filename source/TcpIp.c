@@ -19,6 +19,7 @@
 #include "TcpIp_Cfg.h"
 #include "SoAd_Cbk.h"
 
+
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
@@ -27,6 +28,28 @@
 #include <sys/poll.h>
 #include <netinet/in.h>
 #include <errno.h>
+
+#define TCPIP_MODULEID   170u
+#define TCPIP_INSTANCEID 0u
+
+#if(TCPIP_ENABLE_DEVELOPMENT_ERROR == STD_ON)
+#include "Det.h"
+#define TCPIP_DET_ERROR(api, error) Det_ReportError(TCPIP_MODULEID, TCPIP_INSTANCEID, api, error)
+#define TCPIP_DET_CHECK_RET(check, api, error) \
+    do {                                       \
+        if (!(check)) {                        \
+            Det_ReportError(TCPIP_MODULEID     \
+                          , TCPIP_INSTANCEID   \
+                          , api                \
+                          , error);            \
+            return E_NOT_OK;                   \
+        }                                      \
+    } while(0)
+
+#else
+#define TCPIP_DET_ERROR(api, error)
+#define TCPIP_DET_CHECK_RET(check, api, error)
+#endif
 
 typedef int TcpIp_OsSocketType;
 
@@ -222,6 +245,9 @@ Std_ReturnType TcpIp_Bind(
 
     /** @req SWS_TCPIP_00111 */
     if (bind(s->fd, (const struct sockaddr*)&addr, len) != 0) {
+        if (errno == EADDRINUSE) {
+            TCPIP_DET_ERROR(TCPIP_API_BIND, TCPIP_E_ADDRINUSE);
+        }
         res = E_NOT_OK;
         goto done;
     }
@@ -277,6 +303,8 @@ Std_ReturnType TcpIp_TcpConnect(
         struct sockaddr_in6 in6;
     } addr = {};
     socklen_t len;
+
+    TCPIP_DET_CHECK_RET(remote != NULL_PTR, TCPIP_API_TCPCONNECT, TCPIP_E_PARAM_POINTER);
 
     if (remote->domain != s->domain) {
         return E_NOT_OK;
