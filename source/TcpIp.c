@@ -500,6 +500,18 @@ void TcpIp_SocketState_TcpClose(TcpIp_SocketIdType index)
     SoAd_TcpIpEvent(index, TCPIP_TCP_CLOSED);
 }
 
+void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[index];
+    struct pollfd*    p = &TcpIp_PollFds[index];
+
+    if (p->revents & POLLIN) {
+    }
+
+    if (p->revents & POLLOUT) {
+    }
+}
+
 static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateType state)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
@@ -541,6 +553,8 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
         case TCPIP_SOCKET_STATE_CONNECTING:
             TcpIp_SocketState_Connecting(index);
             break;
+        case TCPIP_SOCKET_STATE_CONNECTED:
+            TcpIp_SocketState_Connected(index);
         case TCPIP_SOCKET_STATE_LISTEN:
             TcpIp_SocketState_Listen(index);
             break;
