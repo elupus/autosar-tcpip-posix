@@ -556,6 +556,7 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
             break;
         case TCPIP_SOCKET_STATE_CONNECTED:
             TcpIp_SocketState_Connected(index);
+            break;
         case TCPIP_SOCKET_STATE_LISTEN:
             TcpIp_SocketState_Listen(index);
             break;
