@@ -592,7 +592,6 @@ void TcpIp_SocketState_Connecting(TcpIp_SocketIdType index)
         v = getpeername(s->fd, (struct sockaddr*)&addr, &len);
         if (v == 0) {
             TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_CONNECTED);
-            SoAd_TcpConnected(index);
         } else {
             TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_ALLOCATED);
         }
@@ -688,6 +687,7 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
             p->events = POLLOUT;
             break;
         case TCPIP_SOCKET_STATE_CONNECTED:
+            SoAd_TcpConnected(index);
             p->events = POLLIN | POLLOUT;
             break;
         case TCPIP_SOCKET_STATE_LISTEN:
