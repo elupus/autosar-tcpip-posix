@@ -28,6 +28,7 @@ struct suite_state {
     TcpIp_SocketIdType id;
     TcpIp_SocketIdType accept_id;
     TcpIp_EventType    events[TCPIP_CFG_MAX_SOCKETS];
+    uint32             received[TCPIP_CFG_MAX_SOCKETS];
 };
 
 struct suite_state suite_state;
@@ -57,6 +58,16 @@ Std_ReturnType SoAd_TcpAccepted(
     suite_state.accept_id               = id_connected;
     suite_state.connected[id_connected] = TRUE;
     return E_OK;
+}
+
+void SoAd_RxIndication(
+        TcpIp_SocketIdType          id,
+        const TcpIp_SockAddrType*   remote,
+        uint8*                      buf,
+        uint16                      len
+    )
+{
+    suite_state.received[id] += len;
 }
 
 Std_ReturnType Det_ReportError(
@@ -255,12 +266,20 @@ void suite_test_loopback_send_udp(void)
     }
 
     suite_state.events[connect]           = -1;
+    suite_state.received[connect]         =  0;
     suite_state.events[listen]            = -1;
+    suite_state.received[listen]          =  0;
 
 
     uint8 data[256] = {0};
     CU_ASSERT_EQUAL(TcpIp_UdpTransmit(connect, data, &remote.base, sizeof(data)), E_OK);
 
+    for (int i = 0; i < 100; ++i) {
+        TcpIp_MainFunction();
+        usleep(1000);
+    }
+
+    CU_ASSERT_EQUAL_FATAL(suite_state.received[listen]               , sizeof(data));
 
     CU_ASSERT_EQUAL_FATAL(suite_state.events[connect]              , (TcpIp_EventType)-1);
     CU_ASSERT_EQUAL_FATAL(suite_state.events[listen]               , (TcpIp_EventType)-1);
