@@ -662,12 +662,63 @@ void TcpIp_SocketState_TcpClose(TcpIp_SocketIdType index)
     TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
 }
 
+void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    uint8 buf[TCPIP_CFG_MAX_PACKETSIZE];
+    int   v;
+    socklen_t len;
+    struct sockaddr_storage addr;
+    len = sizeof(addr);
+
+    v = recvfrom(s->fd, buf, TCPIP_CFG_MAX_PACKETSIZE, 0, (struct sockaddr *)&addr, &len);
+    if (v == -1) {
+        v = errno;
+
+        if ((v == EAGAIN) && (v == EWOULDBLOCK)) {
+            /* NOP */
+        } else {
+            if (s->protocol == TCPIP_IPPROTO_TCP) {
+                SoAd_TcpIpEvent(id, TCPIP_TCP_RESET);
+            } else if (s->protocol == TCPIP_IPPROTO_UDP) {
+                SoAd_TcpIpEvent(id, TCPIP_UDP_CLOSED);
+            }
+            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
+        }
+
+    } else if (v == 0) {
+
+        if (s->protocol == TCPIP_IPPROTO_TCP) {
+            SoAd_TcpIpEvent(id, TCPIP_TCP_FIN_RECEIVED);
+        }
+
+    } else {
+
+        TcpIp_SockAddrStorageType remote;
+        if (TcpIp_GetSockaddrFromBsdSocketAddr(&remote, (struct sockaddr *)&addr) == E_OK) {
+            SoAd_RxIndication(id, &remote.base, buf, v);
+        }
+
+    }
+}
+
+void TcpIp_SocketState_Bound(TcpIp_SocketIdType index)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[index];
+    struct pollfd*    p = &TcpIp_PollFds[index];
+
+    if (p->revents & POLLIN) {
+        TcpIp_SocketState_Receive(index);
+    }
+}
+
 void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
 
     if (p->revents & POLLIN) {
+        TcpIp_SocketState_Receive(index);
     }
 
     if (p->revents & POLLOUT) {
@@ -721,6 +772,9 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
             break;
         case TCPIP_SOCKET_STATE_CONNECTED:
             TcpIp_SocketState_Connected(index);
+            break;
+        case TCPIP_SOCKET_STATE_BOUND:
+            TcpIp_SocketState_Bound(index);
             break;
         case TCPIP_SOCKET_STATE_LISTEN:
             TcpIp_SocketState_Listen(index);
