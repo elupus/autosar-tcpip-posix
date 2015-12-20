@@ -494,14 +494,22 @@ Std_ReturnType TcpIp_UdpTransmit(
     }
 
     while (len > 0u) {
-        uint8*  src;
-        uint16  src_len;
+        const uint8*  src;
+        uint16        src_len;
+
         if (data) {
             src     = data;
             src_len = len;
         } else {
-            uint8 buf[128];
-            SoAd_CopyTxData
+            uint8 buf[TCPIP_CFG_TRANSMIT_STACKSIZE];
+            src     = buf;
+            src_len = TCPIP_CFG_TRANSMIT_STACKSIZE;
+            if (src_len > len) {
+                src_len = len;
+            }
+            if (SoAd_CopyTxData(s->fd, buf, src_len) != BUFREQ_OK) {
+                return E_NOT_OK;
+            }
         }
 
         v = sendto(s->fd, src, src_len, 0, (struct sockaddr *)&addr, addr.ss_len);
@@ -519,24 +527,7 @@ Std_ReturnType TcpIp_UdpTransmit(
         }
     }
 
-    if (data) {
-        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, addr.ss_len);
-
-        if (v == -1) {
-            if (errno == EMSGSIZE) {
-                TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
-            }
-            return E_NOT_OK;
-        } else if (v != len) {
-            TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_MSGSIZE);
-            return E_NOT_OK;
-        }
-    } else {
-
-
-
-    }
-    return E_NOT_OK;
+    return E_OK;
 }
 
 Std_ReturnType TcpIp_TcpTransmit(
