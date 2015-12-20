@@ -658,8 +658,8 @@ void TcpIp_SocketState_TcpClose(TcpIp_SocketIdType index)
     struct pollfd*    p = &TcpIp_PollFds[index];
 
     /* TODO - how to handle proper FIN */
-    TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
     SoAd_TcpIpEvent(index, TCPIP_TCP_CLOSED);
+    TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
 }
 
 void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
