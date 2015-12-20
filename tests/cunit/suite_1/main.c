@@ -20,6 +20,7 @@
 #include "CUnit/Basic.h"
 #include "CUnit/Automated.h"
 #include <arpa/inet.h>
+#include <netdb.h>
 
 struct suite_state {
     TcpIp_DomainType   domain;
@@ -66,6 +67,15 @@ Std_ReturnType Det_ReportError(
     )
 {
     return E_OK;
+}
+
+BufReq_ReturnType SoAd_CopyTxData(
+        TcpIp_SocketIdType id,
+        uint8*             buf,
+        uint16             len
+    )
+{
+    return BUFREQ_E_NOT_OK;
 }
 
 
@@ -161,7 +171,32 @@ void suite_test_close_udp(void)
     suite_test_close_x(FALSE, TCPIP_UDP_CLOSED, 0);
 }
 
-void suite_test_loopback_connect(void)
+void suite_test_fill_sockaddr(TcpIp_SockAddrStorageType* addr, const char* node, uint16 port)
+{
+    struct addrinfo  *result;
+    int v;
+    v = getaddrinfo(node, "", NULL,  &result);
+    CU_ASSERT_EQUAL_FATAL(v, 0);
+
+    if (result->ai_family == AF_INET) {
+        struct sockaddr_in *in  = (struct sockaddr_in *)result->ai_addr;
+        addr->inet.domain  = TCPIP_AF_INET;
+        addr->inet.port    = port;
+        addr->inet.addr[0] = in->sin_addr.s_addr;
+    } else if (result->ai_family == AF_INET6) {
+        struct sockaddr_in6 *in  = (struct sockaddr_in6 *)result->ai_addr;
+        addr->inet6.domain  = TCPIP_AF_INET6;
+        addr->inet6.port    = port;
+        addr->inet6.addr[0] = in->sin6_addr.__u6_addr.__u6_addr32[0];
+        addr->inet6.addr[1] = in->sin6_addr.__u6_addr.__u6_addr32[1];
+        addr->inet6.addr[2] = in->sin6_addr.__u6_addr.__u6_addr32[2];
+        addr->inet6.addr[3] = in->sin6_addr.__u6_addr.__u6_addr32[3];
+    }
+
+    freeaddrinfo(result);
+}
+
+void suite_test_loopback_connect_tcp(void)
 {
     uint16 port;
     TcpIp_SocketIdType listen, connect;
@@ -174,27 +209,11 @@ void suite_test_loopback_connect(void)
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, &connect), E_OK);
 
-    union {
-        TcpIp_SockAddrType      base;
-        TcpIp_SockAddrInetType  inet;
-        TcpIp_SockAddrInet6Type inet6;
-    } data = {0};
-
+    TcpIp_SockAddrStorageType data;
     if (suite_state.domain == TCPIP_AF_INET) {
-        struct in_addr     loopback;
-        inet_pton(AF_INET, "127.0.0.1", &loopback);
-        data.inet.domain  = suite_state.domain;
-        data.inet.port    = port;
-        data.inet.addr[0] = loopback.s_addr;
+        suite_test_fill_sockaddr(&data, "127.0.0.1", port);
     } else {
-        struct in6_addr     loopback;
-        inet_pton(AF_INET6, "::1", &loopback);
-        data.inet6.domain  = suite_state.domain;
-        data.inet6.port    = port;
-        data.inet6.addr[0] = loopback.__u6_addr.__u6_addr32[0];
-        data.inet6.addr[1] = loopback.__u6_addr.__u6_addr32[1];
-        data.inet6.addr[2] = loopback.__u6_addr.__u6_addr32[2];
-        data.inet6.addr[3] = loopback.__u6_addr.__u6_addr32[3];
+        suite_test_fill_sockaddr(&data, "::1", port);
     }
 
     suite_state.connected[connect]        = FALSE;
@@ -213,6 +232,38 @@ void suite_test_loopback_connect(void)
 
     CU_ASSERT_EQUAL_FATAL(suite_state.connected[connect]              , TRUE);
     CU_ASSERT_EQUAL_FATAL(suite_state.connected[suite_state.accept_id], TRUE);
+}
+
+
+void suite_test_loopback_send_udp(void)
+{
+    uint16 port;
+    TcpIp_SocketIdType listen, connect;
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, &listen), E_OK);
+
+    port = TCPIP_PORT_ANY;
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, &connect), E_OK);
+
+    TcpIp_SockAddrStorageType remote;
+    if (suite_state.domain == TCPIP_AF_INET) {
+        suite_test_fill_sockaddr(&remote, "127.0.0.1", port);
+    } else {
+        suite_test_fill_sockaddr(&remote, "::1", port);
+    }
+
+    suite_state.events[connect]           = -1;
+    suite_state.events[listen]            = -1;
+
+
+    uint8 data[256] = {0};
+    CU_ASSERT_EQUAL(TcpIp_UdpTransmit(connect, data, &remote.base, sizeof(data)), E_OK);
+
+
+    CU_ASSERT_EQUAL_FATAL(suite_state.events[connect]              , (TcpIp_EventType)-1);
+    CU_ASSERT_EQUAL_FATAL(suite_state.events[listen]               , (TcpIp_EventType)-1);
 }
 
 void main_add_generic_suite(CU_pSuite suite)
@@ -236,7 +287,8 @@ void main_add_generic_suite(CU_pSuite suite)
 
 void main_add_loopback_suite(CU_pSuite suite)
 {
-    CU_add_test(suite, "connect"                        , suite_test_loopback_connect);
+    CU_add_test(suite, "connect_tcp"                 , suite_test_loopback_connect_tcp);
+    CU_add_test(suite, "send_udp"                    , suite_test_loopback_send_udp);
 }
 
 int main(void)
