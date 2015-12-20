@@ -1,0 +1,8 @@
+tests/cunit/*/CUnitAutomated-Listing.xml
+tests/cunit/*/CUnitAutomated-Results.xml
+tests/cunit/*/main
+tests/cunit/*/main.d
+tests/cunit/*/main.dSYM
+/CUnitAutomated-Results.xml
+/CUnitAutomated-Listing.xml
+.settings
