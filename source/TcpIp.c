@@ -687,9 +687,12 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
         case TCPIP_SOCKET_STATE_CONNECTING:
             p->events = POLLOUT;
             break;
-
+        case TCPIP_SOCKET_STATE_CONNECTED:
+            p->events = POLLIN | POLLOUT;
+            break;
         case TCPIP_SOCKET_STATE_LISTEN:
         case TCPIP_SOCKET_STATE_TCPCLOSE:
+        case TCPIP_SOCKET_STATE_BOUND:
             p->events = POLLIN;
             break;
 
