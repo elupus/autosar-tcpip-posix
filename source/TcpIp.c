@@ -74,7 +74,8 @@ typedef enum {
     TCPIP_SOCKET_STATE_LISTEN,
     TCPIP_SOCKET_STATE_CONNECTING,
     TCPIP_SOCKET_STATE_CONNECTED,
-    TCPIP_SOCKET_STATE_TCPCLOSE,
+    TCPIP_SOCKET_STATE_SHUTDOWN,
+    TCPIP_SOCKET_STATE_FINISHED,
 } TcpIp_SocketStateType;
 
 typedef struct {
@@ -249,23 +250,20 @@ Std_ReturnType TcpIp_Close(
     if (s->protocol == TCPIP_IPPROTO_TCP) {
         if (abort) {
             TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
-            SoAd_TcpIpEvent(id, TCPIP_TCP_RESET);
         } else {
             if (s->state == TCPIP_SOCKET_STATE_CONNECTED) {
                 if (shutdown(s->fd, SHUT_RDWR) == 0) {
-                    TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_TCPCLOSE);
+                    TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_SHUTDOWN);
                     res = E_OK;
                 } else {
                     res = E_NOT_OK;
                 }
             } else {
                 TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
-                SoAd_TcpIpEvent(id, TCPIP_TCP_CLOSED);
             }
         }
     } else if (s->protocol == TCPIP_IPPROTO_UDP) {
         TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
-        SoAd_TcpIpEvent(id, TCPIP_UDP_CLOSED);
         res = E_OK;
     } else {
         res = E_NOT_OK;
@@ -652,7 +650,7 @@ void TcpIp_SocketState_Listen(TcpIp_SocketIdType index)
     }
 }
 
-void TcpIp_SocketState_TcpClose(TcpIp_SocketIdType index)
+void TcpIp_SocketState_Shutdown(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
@@ -678,18 +676,13 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
         if ((v == EAGAIN) && (v == EWOULDBLOCK)) {
             /* NOP */
         } else {
-            if (s->protocol == TCPIP_IPPROTO_TCP) {
-                SoAd_TcpIpEvent(id, TCPIP_TCP_RESET);
-            } else if (s->protocol == TCPIP_IPPROTO_UDP) {
-                SoAd_TcpIpEvent(id, TCPIP_UDP_CLOSED);
-            }
             TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
         }
 
     } else if (v == 0) {
 
         if (s->protocol == TCPIP_IPPROTO_TCP) {
-            SoAd_TcpIpEvent(id, TCPIP_TCP_FIN_RECEIVED);
+            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_FINISHED);
         }
 
     } else {
@@ -730,10 +723,9 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
 
-    s->state = state;
 
     /* what events are we listening on */
-    switch (s->state) {
+    switch (state) {
         case TCPIP_SOCKET_STATE_CONNECTING:
             p->events = POLLOUT;
             break;
@@ -742,12 +734,27 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
             p->events = POLLIN | POLLOUT;
             break;
         case TCPIP_SOCKET_STATE_LISTEN:
-        case TCPIP_SOCKET_STATE_TCPCLOSE:
+        case TCPIP_SOCKET_STATE_SHUTDOWN:
         case TCPIP_SOCKET_STATE_BOUND:
             p->events = POLLIN;
             break;
 
+        case TCPIP_SOCKET_STATE_FINISHED:
+            SoAd_TcpIpEvent(index, TCPIP_TCP_FIN_RECEIVED);
+            p->events = POLLIN;
+            break;
+
         case TCPIP_SOCKET_STATE_UNUSED:
+            if (s->protocol == TCPIP_IPPROTO_UDP) {
+                SoAd_TcpIpEvent(index, TCPIP_UDP_CLOSED);
+            } else if (s->protocol == TCPIP_IPPROTO_TCP) {
+                if (s->state == TCPIP_SOCKET_STATE_CONNECTED) {
+                    SoAd_TcpIpEvent(index, TCPIP_TCP_RESET);
+                } else {
+                    SoAd_TcpIpEvent(index, TCPIP_TCP_CLOSED);
+                }
+            }
+
             if (s->fd != INVALID_SOCKET) {
                 closesocket(s->fd);
                 s->fd = INVALID_SOCKET;
@@ -758,6 +765,8 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
             p->events = 0;
             break;
     }
+
+    s->state = state;
 }
 
 static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
@@ -779,8 +788,8 @@ static void TcpIp_SocketState_All(TcpIp_SocketIdType index)
         case TCPIP_SOCKET_STATE_LISTEN:
             TcpIp_SocketState_Listen(index);
             break;
-        case TCPIP_SOCKET_STATE_TCPCLOSE:
-            TcpIp_SocketState_TcpClose(index);
+        case TCPIP_SOCKET_STATE_SHUTDOWN:
+            TcpIp_SocketState_Shutdown(index);
             break;
         default:
             break;

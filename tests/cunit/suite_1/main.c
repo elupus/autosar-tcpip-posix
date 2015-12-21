@@ -164,7 +164,7 @@ void suite_test_simple_listen_tcp(void)
 
 void suite_test_abort_tcp(void)
 {
-    suite_test_close_x(TRUE, TCPIP_TCP_RESET, 0);
+    suite_test_close_x(TRUE, TCPIP_TCP_CLOSED, 0);
 }
 
 void suite_test_close_tcp(void)
