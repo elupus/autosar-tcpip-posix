@@ -252,7 +252,7 @@ Std_ReturnType TcpIp_Close(
             TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
         } else {
             if (s->state == TCPIP_SOCKET_STATE_CONNECTED) {
-                if (shutdown(s->fd, SHUT_RDWR) == 0) {
+                if (shutdown(s->fd, SHUT_RD) == 0) {
                     TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_SHUTDOWN);
                     res = E_OK;
                 } else {
@@ -260,6 +260,7 @@ Std_ReturnType TcpIp_Close(
                 }
             } else {
                 TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
+                res = E_OK;
             }
         }
     } else if (s->protocol == TCPIP_IPPROTO_UDP) {
@@ -650,16 +651,6 @@ void TcpIp_SocketState_Listen(TcpIp_SocketIdType index)
     }
 }
 
-void TcpIp_SocketState_Shutdown(TcpIp_SocketIdType index)
-{
-    TcpIp_SocketType* s = &TcpIp_Sockets[index];
-    struct pollfd*    p = &TcpIp_PollFds[index];
-
-    /* TODO - how to handle proper FIN */
-    SoAd_TcpIpEvent(index, TCPIP_TCP_CLOSED);
-    TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
-}
-
 void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[id];
@@ -682,7 +673,11 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
     } else if (v == 0) {
 
         if (s->protocol == TCPIP_IPPROTO_TCP) {
-            TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_FINISHED);
+            if (s->state == TCPIP_SOCKET_STATE_SHUTDOWN) {
+                TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
+            } else {
+                TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_FINISHED);
+            }
         }
 
     } else {
@@ -692,6 +687,16 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
             SoAd_RxIndication(id, &remote.base, buf, v);
         }
 
+    }
+}
+
+void TcpIp_SocketState_Shutdown(TcpIp_SocketIdType index)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[index];
+    struct pollfd*    p = &TcpIp_PollFds[index];
+
+    if (p->revents & POLLIN) {
+        TcpIp_SocketState_Receive(index);
     }
 }
 
