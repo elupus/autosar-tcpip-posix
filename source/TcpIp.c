@@ -141,7 +141,6 @@ static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage
         struct sockaddr_in*     in   = (struct sockaddr_in*)trg;
         in->sin_family      = AF_INET;
         in->sin_port        = inet->port;
-        in->sin_len         = sizeof(*in);
         in->sin_addr.s_addr = inet->addr[0];
         res = E_OK;
     } else if (src->domain == TCPIP_AF_INET6) {
@@ -149,11 +148,7 @@ static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage
         struct sockaddr_in6*     in6  = (struct sockaddr_in6*)trg;
         in6->sin6_family = AF_INET6;
         in6->sin6_port   = inet->port;
-        in6->sin6_addr.__u6_addr.__u6_addr32[0] = inet->addr[0];
-        in6->sin6_addr.__u6_addr.__u6_addr32[1] = inet->addr[1];
-        in6->sin6_addr.__u6_addr.__u6_addr32[2] = inet->addr[2];
-        in6->sin6_addr.__u6_addr.__u6_addr32[3] = inet->addr[3];
-        in6->sin6_len    = sizeof(*in6);
+        memcpy(in6->sin6_addr.s6_addr, &inet->addr, sizeof(in6->sin6_addr.s6_addr));
         res = E_OK;
     } else {
         res = E_NOT_OK;
@@ -176,10 +171,7 @@ static Std_ReturnType TcpIp_GetSockaddrFromBsdSocketAddr(TcpIp_SockAddrStorageTy
         struct sockaddr_in6*     in6  = (struct sockaddr_in6*)trg;
         trg->inet6.domain  = TCPIP_AF_INET6;
         trg->inet6.port    = in6->sin6_port;
-        trg->inet6.addr[0] = in6->sin6_addr.__u6_addr.__u6_addr32[0];
-        trg->inet6.addr[1] = in6->sin6_addr.__u6_addr.__u6_addr32[1];
-        trg->inet6.addr[2] = in6->sin6_addr.__u6_addr.__u6_addr32[2];
-        trg->inet6.addr[3] = in6->sin6_addr.__u6_addr.__u6_addr32[3];
+        memcpy(trg->inet6.addr, in6->sin6_addr.s6_addr, sizeof(trg->inet6.addr));
         res = E_OK;
     } else {
         res = E_NOT_OK;
@@ -401,7 +393,7 @@ Std_ReturnType TcpIp_TcpConnect(
         return E_NOT_OK;
     }
 
-    int v = connect(s->fd, (const struct sockaddr*)&addr, addr.ss_len);
+    int v = connect(s->fd, (const struct sockaddr*)&addr, sizeof(addr));
     if (v != 0) {
         v = errno;
     }
@@ -493,7 +485,7 @@ Std_ReturnType TcpIp_UdpTransmit(
     }
 
     if (data) {
-        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, addr.ss_len);
+        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, sizeof(addr));
     } else {
         uint8   buf[len];
         uint8*  ptr     = buf;
@@ -501,7 +493,7 @@ Std_ReturnType TcpIp_UdpTransmit(
         if (SoAd_CopyTxData(s->fd, buf, len) != BUFREQ_OK) {
             return E_NOT_OK;
         }
-        v = sendto(s->fd, buf, len, 0, (struct sockaddr *)&addr, addr.ss_len);
+        v = sendto(s->fd, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
     }
 
     if (v == -1) {

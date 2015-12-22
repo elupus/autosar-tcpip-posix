@@ -198,10 +198,7 @@ void suite_test_fill_sockaddr(TcpIp_SockAddrStorageType* addr, const char* node,
         struct sockaddr_in6 *in  = (struct sockaddr_in6 *)result->ai_addr;
         addr->inet6.domain  = TCPIP_AF_INET6;
         addr->inet6.port    = port;
-        addr->inet6.addr[0] = in->sin6_addr.__u6_addr.__u6_addr32[0];
-        addr->inet6.addr[1] = in->sin6_addr.__u6_addr.__u6_addr32[1];
-        addr->inet6.addr[2] = in->sin6_addr.__u6_addr.__u6_addr32[2];
-        addr->inet6.addr[3] = in->sin6_addr.__u6_addr.__u6_addr32[3];
+        memcpy(addr->inet6.addr, in->sin6_addr.s6_addr, sizeof(addr->inet6.addr));
     }
 
     freeaddrinfo(result);
