@@ -304,17 +304,45 @@ typedef uint8  TcpIp_LocalAddrIdType;
  *        Note: Each accepted incoming TCP connection also allocates a socket resource.
  */
 Std_ReturnType TcpIp_SoAdGetSocket(
-        TcpIp_DomainType    Domain,
-        TcpIp_ProtocolType  Protocol,
-        TcpIp_SocketIdType* SocketIdPtr
+        TcpIp_DomainType            domain,
+        TcpIp_ProtocolType          protocol,
+        TcpIp_SocketIdType*         id
     );
 
-void TcpIp_Init(const TcpIp_ConfigType* config);
+void TcpIp_Init(
+        const TcpIp_ConfigType*     config
+    );
 
 
-Std_ReturnType TcpIp_Bind(TcpIp_SocketIdType       id, TcpIp_LocalAddrIdType local, uint16* port);
-Std_ReturnType TcpIp_TcpListen (TcpIp_SocketIdType id, uint16 channels);
-Std_ReturnType TcpIp_TcpConnect(TcpIp_SocketIdType id, const TcpIp_SockAddrType* remote);
+Std_ReturnType TcpIp_Bind(
+        TcpIp_SocketIdType          id,
+        TcpIp_LocalAddrIdType       local,
+        uint16* port
+    );
+
+Std_ReturnType TcpIp_TcpListen(
+        TcpIp_SocketIdType id,
+        uint16 channels
+    );
+
+Std_ReturnType TcpIp_TcpConnect(
+        TcpIp_SocketIdType          id,
+        const TcpIp_SockAddrType*   remote
+    );
+
+Std_ReturnType TcpIp_UdpTransmit(
+        TcpIp_SocketIdType          id,
+        const uint8*                data,
+        const TcpIp_SockAddrType*   remote,
+        uint16                      len
+    );
+
+Std_ReturnType TcpIp_TcpTransmit(
+        TcpIp_SocketIdType  id,
+        const uint8*        data,
+        uint32              aailable,
+        boolean             force
+    );
 
 
 #endif /* TCPIP_H_ */
