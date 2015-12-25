@@ -660,6 +660,37 @@ Std_ReturnType TcpIp_SoAdGetSocket(
     return res;
 }
 
+/**
+ * @brief By this API service the TCP/IP stack is requested to change a parameter of a socket. E.g. the Nagle algorithm may be controlled by this API.
+ * @req SWS_TCPIP_00016
+ * @req SWS_TCPIP_00119
+ */
+Std_ReturnType TcpIp_ChangeParameter(
+        TcpIp_SocketIdType id,
+        TcpIp_ParamIdType  parm,
+        const uint8*       value
+    )
+{
+    Std_ReturnType     res;
+    TcpIp_SocketType*  s = &TcpIp_Sockets[id];
+
+    switch (id) {
+        case TCPIP_PARAMID_TCP_KEEPALIVE: {
+            int v = *value;
+            if (setsockopt(s->fd, SOL_SOCKET, SO_KEEPALIVE, &v, sizeof(v)) == 0) {
+                res = E_OK;
+            } else {
+                res = E_NOT_OK;
+            }
+            break;
+        }
+        default:
+            res = E_NOT_OK;
+    }
+
+    return res;
+}
+
 void TcpIp_SocketState_Connecting(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];

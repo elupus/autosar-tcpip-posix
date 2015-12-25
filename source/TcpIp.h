@@ -143,6 +143,59 @@ typedef enum {
 } TcpIp_ReturnType;
 
 /**
+ * @brief  Type for the specification of all supported Parameter IDs.
+ * @req    SWS_TCPIP_00126
+ */
+typedef enum {
+    /**
+     * @brief Specifies the maximum TCP receive window for the socket.
+     */
+    TCPIP_PARAMID_TCP_RXWND_MAX            = 0x00,
+
+    /**
+     * @brief Specifies the frame priority for outgoing frames on the socket.
+     */
+    TCPIP_PARAMID_FRAMEPRIO                = 0x01,
+
+    /**
+     * @brief Specifies if the Nagle Algorithm according to IETF RFC 896 is enabled or not.
+     */
+    TCPIP_PARAMID_TCP_NAGLE                = 0x02,
+
+    /**
+     * Specifies if TCP Keep Alive Probes are sent on the socket connection.
+     */
+    TCPIP_PARAMID_TCP_KEEPALIVE            = 0x03,
+
+    /**
+     * @brief Specifies the time to live value for outgoing frames on the socket.
+     *
+     * For IPv6 this parameter specifies the value of the HopLimit field used in the IPv6 header.
+     */
+    TCPIP_PARAMID_TTL                      = 0x04,
+
+    /**
+     * @brief Specifies the time in [s] between the last data packet sent (simple ACKs are not considered data) and the first keepalive probe.
+     */
+    TCPIP_PARAMID_TCP_KEEPALIVE_TIME       = 0x05,
+
+    /**
+     * @brief Specifies the maximum number of times that a keepalive probe is retransmitted.
+     */
+    TCPIP_PARAMID_TCP_KEEPALIVE_PROBES_MAX = 0x06,
+
+    /**
+     * @brief Specifies the interval in [s] between subsequent keepalive probes.
+     */
+    TCPIP_PARAMID_TCP_KEEPALIVE_INTERVAL   = 0x07,
+
+    /**
+     * Start of vendor specific range of parameter IDs.
+     */
+    TCPIP_PARAMID_VENDOR_SPECIFIC          = 0x80,
+} TcpIp_ParamIdType;
+
+/**
  * @brief Development Errors
  * @req SWS_TCPIP_00042
  * @{
@@ -344,5 +397,10 @@ Std_ReturnType TcpIp_TcpTransmit(
         boolean             force
     );
 
+Std_ReturnType TcpIp_ChangeParameter(
+        TcpIp_SocketIdType id,
+        TcpIp_ParamIdType  parm,
+        const uint8*       value
+    );
 
 #endif /* TCPIP_H_ */
