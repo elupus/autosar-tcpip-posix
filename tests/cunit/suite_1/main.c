@@ -22,22 +22,33 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+struct suite_socket_state {
+    boolean            connected;
+    TcpIp_EventType    events;
+    uint32             received;
+};
+
 struct suite_state {
     TcpIp_DomainType   domain;
-    boolean            connected[TCPIP_CFG_MAX_SOCKETS];
     TcpIp_SocketIdType id;
     TcpIp_SocketIdType accept_id;
-    TcpIp_EventType    events[TCPIP_CFG_MAX_SOCKETS];
-    uint32             received[TCPIP_CFG_MAX_SOCKETS];
+    struct suite_socket_state s[TCPIP_CFG_MAX_SOCKETS];
 };
 
 struct suite_state suite_state;
+
+void suite_reset_socket_state(TcpIp_SocketIdType id)
+{
+    suite_state.s[id].connected = FALSE;
+    suite_state.s[id].events    = -1;
+    suite_state.s[id].received  = 0u;
+}
 
 void SoAd_TcpConnected(
         TcpIp_SocketIdType id
     )
 {
-    suite_state.connected[id] = TRUE;
+    suite_state.s[id].connected = TRUE;
 }
 
 void SoAd_TcpIpEvent(
@@ -45,7 +56,7 @@ void SoAd_TcpIpEvent(
         TcpIp_EventType             event
     )
 {
-    suite_state.events[id] = event;
+    suite_state.s[id].events = event;
 }
 
 
@@ -55,8 +66,9 @@ Std_ReturnType SoAd_TcpAccepted(
         const TcpIp_SockAddrType*   remote
     )
 {
-    suite_state.accept_id               = id_connected;
-    suite_state.connected[id_connected] = TRUE;
+    suite_state.accept_id                 = id_connected;
+    suite_reset_socket_state(id_connected);
+    suite_state.s[id_connected].connected = TRUE;
     return E_OK;
 }
 
@@ -67,7 +79,7 @@ void SoAd_RxIndication(
         uint16                      len
     )
 {
-    suite_state.received[id] += len;
+    suite_state.s[id].received += len;
 }
 
 Std_ReturnType Det_ReportError(
@@ -134,15 +146,15 @@ void suite_test_simple_bind_x(TcpIp_DomainType domain, TcpIp_ProtocolType protoc
 
 void suite_test_close_x(boolean abort, TcpIp_EventType event, int count)
 {
-    suite_state.events[suite_state.id] = -1;
+    suite_state.s[suite_state.id].events = -1;
     CU_ASSERT_EQUAL(TcpIp_Close(suite_state.id, abort), E_OK);
 
-    for (int i; i < count && suite_state.events[suite_state.id] != event ; ++i) {
+    for (int i; i < count && suite_state.s[suite_state.id].events != event ; ++i) {
         TcpIp_MainFunction();
         usleep(1000);
     }
 
-    CU_ASSERT_EQUAL(suite_state.events[suite_state.id], event);
+    CU_ASSERT_EQUAL(suite_state.s[suite_state.id].events, event);
 }
 
 
@@ -211,6 +223,9 @@ void suite_test_loopback_tcp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* con
     CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, listen), E_OK);
     CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, connect), E_OK);
 
+    suite_reset_socket_state(*listen);
+    suite_reset_socket_state(*connect);
+
     port = TCPIP_PORT_ANY;
     CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(*listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
     CU_ASSERT_EQUAL_FATAL(TcpIp_TcpListen(*listen, 100)                                  , E_OK);
@@ -222,23 +237,21 @@ void suite_test_loopback_tcp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* con
         suite_test_fill_sockaddr(&data, "::1", port);
     }
 
-    suite_state.connected[*connect]        = FALSE;
-    suite_state.events[*connect]           = -1;
-    suite_state.accept_id                  = *listen;
+    suite_state.accept_id                    = TCPIP_SOCKETID_INVALID;
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(*connect, &data.base), E_OK);
 
-    for (int i = 0; i < 1000 && ( (suite_state.connected[*connect]  != TRUE)
-                             ||   (suite_state.accept_id == *listen)); ++i) {
+    for (int i = 0; i < 1000 && ( (suite_state.s[*connect].connected  != TRUE)
+                             ||   (suite_state.accept_id == TCPIP_SOCKETID_INVALID)); ++i) {
         TcpIp_MainFunction();
         usleep(1000);
     }
-    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, *connect);
-    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, *listen);
+    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, TCPIP_SOCKETID_INVALID);
     *accept = suite_state.accept_id;
 
-    CU_ASSERT_EQUAL_FATAL(suite_state.connected[*connect]              , TRUE);
-    CU_ASSERT_EQUAL_FATAL(suite_state.connected[*accept], TRUE);
+    CU_ASSERT_EQUAL_FATAL(suite_state.s[*connect].connected, TRUE);
+    CU_ASSERT_EQUAL_FATAL(suite_state.s[*accept].connected , TRUE);
+
 }
 
 void suite_test_loopback_udp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* connect, TcpIp_SockAddrStorageType* remote)
@@ -275,9 +288,6 @@ void suite_test_loopback_send_tcp_simple(void)
     TcpIp_SocketIdType listen, connect, accept;
     suite_test_loopback_tcp(&listen, &connect, &accept);
 
-    suite_state.received[connect]         =  0;
-    suite_state.received[accept]          =  0;
-
 
     uint8 data[256] = {0};
     CU_ASSERT_EQUAL(TcpIp_TcpTransmit(connect, data, sizeof(data) / 2, TRUE), E_OK);
@@ -288,8 +298,8 @@ void suite_test_loopback_send_tcp_simple(void)
         usleep(1000);
     }
 
-    CU_ASSERT_EQUAL(suite_state.received[connect] , sizeof(data));
-    CU_ASSERT_EQUAL(suite_state.received[accept]  , sizeof(data) / 2);
+    CU_ASSERT_EQUAL(suite_state.s[connect].received , sizeof(data));
+    CU_ASSERT_EQUAL(suite_state.s[accept].received  , sizeof(data) / 2);
 
 
     CU_ASSERT_EQUAL(TcpIp_Close(listen , TRUE), E_OK);
@@ -305,7 +315,7 @@ void suite_test_loopback_send_udp(void)
 
     suite_test_loopback_udp(&listen, &connect, &remote);
 
-    suite_state.received[listen]          =  0;
+    suite_state.s[listen].received          =  0;
 
     uint8 data[256] = {0};
     CU_ASSERT_EQUAL(TcpIp_UdpTransmit(connect, data, &remote.base, sizeof(data)), E_OK);
@@ -315,7 +325,7 @@ void suite_test_loopback_send_udp(void)
         usleep(1000);
     }
 
-    CU_ASSERT_EQUAL_FATAL(suite_state.received[listen]               , sizeof(data));
+    CU_ASSERT_EQUAL_FATAL(suite_state.s[listen].received               , sizeof(data));
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_Close(listen , TRUE), E_OK);
     CU_ASSERT_EQUAL_FATAL(TcpIp_Close(connect, TRUE), E_OK);
