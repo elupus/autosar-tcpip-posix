@@ -140,7 +140,7 @@ static sint8 TcpIp_GetBsdDomainFromDomain(TcpIp_DomainType domain)
     return res;
 }
 
-static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage* trg, const TcpIp_SockAddrType* src)
+static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage* trg, socklen_t* len, const TcpIp_SockAddrType* src)
 {
     Std_ReturnType res;
     memset(trg, 0, sizeof(*trg));
@@ -150,6 +150,7 @@ static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage
         in->sin_family      = AF_INET;
         in->sin_port        = inet->port;
         in->sin_addr.s_addr = inet->addr[0];
+        *len = sizeof(*in);
         res = E_OK;
     } else if (src->domain == TCPIP_AF_INET6) {
         TcpIp_SockAddrInet6Type* inet = (TcpIp_SockAddrInet6Type*)src;
@@ -157,6 +158,7 @@ static Std_ReturnType TcpIp_GetBsdSockaddrFromSocketAddr(struct sockaddr_storage
         in6->sin6_family = AF_INET6;
         in6->sin6_port   = inet->port;
         memcpy(in6->sin6_addr.s6_addr, &inet->addr, sizeof(in6->sin6_addr.s6_addr));
+        *len = sizeof(*in6);
         res = E_OK;
     } else {
         res = E_NOT_OK;
@@ -385,7 +387,7 @@ Std_ReturnType TcpIp_TcpConnect(
     Std_ReturnType    res;
 
     struct sockaddr_storage  addr;
-    socklen_t len;
+    socklen_t                addr_len;
 
     TCPIP_DET_CHECK_RET(remote != NULL_PTR, TCPIP_API_TCPCONNECT, TCPIP_E_PARAM_POINTER);
 
@@ -393,7 +395,7 @@ Std_ReturnType TcpIp_TcpConnect(
         return E_NOT_OK;
     }
 
-    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, remote) != E_OK) {
+    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, &addr_len, remote) != E_OK) {
         return E_NOT_OK;
     }
 
@@ -401,7 +403,7 @@ Std_ReturnType TcpIp_TcpConnect(
         return E_NOT_OK;
     }
 
-    int v = connect(s->fd, (const struct sockaddr*)&addr, sizeof(addr));
+    int v = connect(s->fd, (const struct sockaddr*)&addr, addr_len);
     if (v != 0) {
         v = errno;
     }
@@ -477,13 +479,14 @@ Std_ReturnType TcpIp_UdpTransmit(
     int v;
     Std_ReturnType res;
     struct sockaddr_storage  addr;
+    socklen_t                addr_len;
 
     if (remote->domain != s->domain) {
         TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_PROTOCOL);
         return E_NOT_OK;
     }
 
-    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, remote) != E_OK) {
+    if (TcpIp_GetBsdSockaddrFromSocketAddr(&addr, &addr_len, remote) != E_OK) {
         TCPIP_DET_ERROR(TCPIP_API_UDPTRANSMIT, TCPIP_E_INV_ARG);
         return E_NOT_OK;
     }
@@ -493,7 +496,7 @@ Std_ReturnType TcpIp_UdpTransmit(
     }
 
     if (data) {
-        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, sizeof(addr));
+        v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, addr_len);
     } else {
         uint8   buf[len];
         uint8*  ptr     = buf;
