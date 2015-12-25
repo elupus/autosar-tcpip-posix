@@ -307,6 +307,33 @@ void suite_test_loopback_send_tcp_simple(void)
     CU_ASSERT_EQUAL(TcpIp_Close(accept , TRUE), E_OK);
 }
 
+
+void suite_test_loopback_send_tcp_closed(void)
+{
+    TcpIp_SocketIdType listen, connect, accept;
+    suite_test_loopback_tcp(&listen, &connect, &accept);
+
+
+    uint8 data[256] = {0};
+    CU_ASSERT_EQUAL(TcpIp_TcpTransmit(connect, data, sizeof(data) / 2, TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_TcpTransmit(accept , data, sizeof(data)    , TRUE), E_OK);
+
+    /* for some reason, closing both sides cleanly drops data in osx sockets */
+    /* CU_ASSERT_EQUAL(TcpIp_Close(connect, FALSE), E_OK); */
+    CU_ASSERT_EQUAL(TcpIp_Close(accept , FALSE), E_OK);
+
+    for (int i = 0; i < 100; ++i) {
+        TcpIp_MainFunction();
+        usleep(1000);
+    }
+
+    CU_ASSERT_EQUAL(suite_state.s[connect].received , sizeof(data));
+    CU_ASSERT_EQUAL(suite_state.s[accept].received  , sizeof(data) / 2);
+
+    CU_ASSERT_EQUAL(TcpIp_Close(connect, TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_Close(listen , TRUE), E_OK);
+}
+
 void suite_test_loopback_send_udp(void)
 {
     uint16 port;
@@ -354,6 +381,7 @@ void main_add_loopback_suite(CU_pSuite suite)
 {
     CU_add_test(suite, "connect_tcp"                 , suite_test_loopback_connect_tcp);
     CU_add_test(suite, "send_tcp_simple"             , suite_test_loopback_send_tcp_simple);
+    CU_add_test(suite, "send_tcp_closed"             , suite_test_loopback_send_tcp_closed);
     CU_add_test(suite, "send_udp"                    , suite_test_loopback_send_udp);
 }
 
