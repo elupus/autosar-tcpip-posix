@@ -241,16 +241,6 @@ void suite_test_loopback_tcp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* con
     CU_ASSERT_EQUAL_FATAL(suite_state.connected[*accept], TRUE);
 }
 
-void suite_test_loopback_connect_tcp(void)
-{
-    TcpIp_SocketIdType listen, connect, accept;
-    suite_test_loopback_tcp(&listen, &connect, &accept);
-
-    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(listen , TRUE), E_OK);
-    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(connect, TRUE), E_OK);
-    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(accept , TRUE), E_OK);
-}
-
 void suite_test_loopback_udp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* connect, TcpIp_SockAddrStorageType* remote)
 {
     uint16 port;
@@ -270,6 +260,43 @@ void suite_test_loopback_udp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* con
 }
 
 
+void suite_test_loopback_connect_tcp(void)
+{
+    TcpIp_SocketIdType listen, connect, accept;
+    suite_test_loopback_tcp(&listen, &connect, &accept);
+
+    CU_ASSERT_EQUAL(TcpIp_Close(listen , TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_Close(connect, TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_Close(accept , TRUE), E_OK);
+}
+
+void suite_test_loopback_send_tcp_simple(void)
+{
+    TcpIp_SocketIdType listen, connect, accept;
+    suite_test_loopback_tcp(&listen, &connect, &accept);
+
+    suite_state.received[connect]         =  0;
+    suite_state.received[accept]          =  0;
+
+
+    uint8 data[256] = {0};
+    CU_ASSERT_EQUAL(TcpIp_TcpTransmit(connect, data, sizeof(data) / 2, TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_TcpTransmit(accept , data, sizeof(data)    , TRUE), E_OK);
+
+    for (int i = 0; i < 100; ++i) {
+        TcpIp_MainFunction();
+        usleep(1000);
+    }
+
+    CU_ASSERT_EQUAL(suite_state.received[connect] , sizeof(data));
+    CU_ASSERT_EQUAL(suite_state.received[accept]  , sizeof(data) / 2);
+
+
+    CU_ASSERT_EQUAL(TcpIp_Close(listen , TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_Close(connect, TRUE), E_OK);
+    CU_ASSERT_EQUAL(TcpIp_Close(accept , TRUE), E_OK);
+}
+
 void suite_test_loopback_send_udp(void)
 {
     uint16 port;
@@ -278,9 +305,6 @@ void suite_test_loopback_send_udp(void)
 
     suite_test_loopback_udp(&listen, &connect, &remote);
 
-    suite_state.events[connect]           = -1;
-    suite_state.received[connect]         =  0;
-    suite_state.events[listen]            = -1;
     suite_state.received[listen]          =  0;
 
     uint8 data[256] = {0};
@@ -292,9 +316,6 @@ void suite_test_loopback_send_udp(void)
     }
 
     CU_ASSERT_EQUAL_FATAL(suite_state.received[listen]               , sizeof(data));
-
-    CU_ASSERT_EQUAL_FATAL(suite_state.events[connect]              , (TcpIp_EventType)-1);
-    CU_ASSERT_EQUAL_FATAL(suite_state.events[listen]               , (TcpIp_EventType)-1);
 
     CU_ASSERT_EQUAL_FATAL(TcpIp_Close(listen , TRUE), E_OK);
     CU_ASSERT_EQUAL_FATAL(TcpIp_Close(connect, TRUE), E_OK);
@@ -322,6 +343,7 @@ void main_add_generic_suite(CU_pSuite suite)
 void main_add_loopback_suite(CU_pSuite suite)
 {
     CU_add_test(suite, "connect_tcp"                 , suite_test_loopback_connect_tcp);
+    CU_add_test(suite, "send_tcp_simple"             , suite_test_loopback_send_tcp_simple);
     CU_add_test(suite, "send_udp"                    , suite_test_loopback_send_udp);
 }
 
