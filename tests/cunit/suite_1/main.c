@@ -204,18 +204,16 @@ void suite_test_fill_sockaddr(TcpIp_SockAddrStorageType* addr, const char* node,
     freeaddrinfo(result);
 }
 
-void suite_test_loopback_connect_tcp(void)
+void suite_test_loopback_tcp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* connect, TcpIp_SocketIdType* accept)
 {
     uint16 port;
-    TcpIp_SocketIdType listen, connect;
 
-    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, &listen), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, listen), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, connect), E_OK);
 
     port = TCPIP_PORT_ANY;
-    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
-    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpListen(listen, 100)                                  , E_OK);
-
-    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_TCP, &connect), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(*listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpListen(*listen, 100)                                  , E_OK);
 
     TcpIp_SockAddrStorageType data;
     if (suite_state.domain == TCPIP_AF_INET) {
@@ -224,22 +222,51 @@ void suite_test_loopback_connect_tcp(void)
         suite_test_fill_sockaddr(&data, "::1", port);
     }
 
-    suite_state.connected[connect]        = FALSE;
-    suite_state.events[connect]           = -1;
-    suite_state.accept_id                 = listen;
+    suite_state.connected[*connect]        = FALSE;
+    suite_state.events[*connect]           = -1;
+    suite_state.accept_id                  = *listen;
 
-    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(connect, &data.base), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_TcpConnect(*connect, &data.base), E_OK);
 
-    for (int i = 0; i < 1000 && ( (suite_state.connected[connect]  != TRUE)
-                             ||   (suite_state.accept_id == listen)); ++i) {
+    for (int i = 0; i < 1000 && ( (suite_state.connected[*connect]  != TRUE)
+                             ||   (suite_state.accept_id == *listen)); ++i) {
         TcpIp_MainFunction();
         usleep(1000);
     }
-    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, connect);
-    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, listen);
+    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, *connect);
+    CU_ASSERT_NOT_EQUAL_FATAL(suite_state.accept_id, *listen);
+    *accept = suite_state.accept_id;
 
-    CU_ASSERT_EQUAL_FATAL(suite_state.connected[connect]              , TRUE);
-    CU_ASSERT_EQUAL_FATAL(suite_state.connected[suite_state.accept_id], TRUE);
+    CU_ASSERT_EQUAL_FATAL(suite_state.connected[*connect]              , TRUE);
+    CU_ASSERT_EQUAL_FATAL(suite_state.connected[*accept], TRUE);
+}
+
+void suite_test_loopback_connect_tcp(void)
+{
+    TcpIp_SocketIdType listen, connect, accept;
+    suite_test_loopback_tcp(&listen, &connect, &accept);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(listen , TRUE), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(connect, TRUE), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(accept , TRUE), E_OK);
+}
+
+void suite_test_loopback_udp(TcpIp_SocketIdType* listen, TcpIp_SocketIdType* connect, TcpIp_SockAddrStorageType* remote)
+{
+    uint16 port;
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, listen), E_OK);
+
+    port = TCPIP_PORT_ANY;
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(*listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, connect), E_OK);
+
+    if (suite_state.domain == TCPIP_AF_INET) {
+        suite_test_fill_sockaddr(remote, "127.0.0.1", port);
+    } else {
+        suite_test_fill_sockaddr(remote, "::1", port);
+    }
 }
 
 
@@ -247,26 +274,14 @@ void suite_test_loopback_send_udp(void)
 {
     uint16 port;
     TcpIp_SocketIdType listen, connect;
-
-    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, &listen), E_OK);
-
-    port = TCPIP_PORT_ANY;
-    CU_ASSERT_EQUAL_FATAL(TcpIp_Bind(listen, TCPIP_LOCALADDRID_ANY, &port)              , E_OK);
-
-    CU_ASSERT_EQUAL_FATAL(TcpIp_SoAdGetSocket(suite_state.domain, TCPIP_IPPROTO_UDP, &connect), E_OK);
-
     TcpIp_SockAddrStorageType remote;
-    if (suite_state.domain == TCPIP_AF_INET) {
-        suite_test_fill_sockaddr(&remote, "127.0.0.1", port);
-    } else {
-        suite_test_fill_sockaddr(&remote, "::1", port);
-    }
+
+    suite_test_loopback_udp(&listen, &connect, &remote);
 
     suite_state.events[connect]           = -1;
     suite_state.received[connect]         =  0;
     suite_state.events[listen]            = -1;
     suite_state.received[listen]          =  0;
-
 
     uint8 data[256] = {0};
     CU_ASSERT_EQUAL(TcpIp_UdpTransmit(connect, data, &remote.base, sizeof(data)), E_OK);
@@ -280,6 +295,9 @@ void suite_test_loopback_send_udp(void)
 
     CU_ASSERT_EQUAL_FATAL(suite_state.events[connect]              , (TcpIp_EventType)-1);
     CU_ASSERT_EQUAL_FATAL(suite_state.events[listen]               , (TcpIp_EventType)-1);
+
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(listen , TRUE), E_OK);
+    CU_ASSERT_EQUAL_FATAL(TcpIp_Close(connect, TRUE), E_OK);
 }
 
 void main_add_generic_suite(CU_pSuite suite)
