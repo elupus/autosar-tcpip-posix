@@ -79,6 +79,14 @@ typedef enum {
 } TcpIp_SocketStateType;
 
 typedef struct {
+    const uint8* buf;
+    uint16       buf_rem;
+    uint32       tot_rem;
+} TcpIp_SendStateType;
+
+typedef struct {
+    TcpIp_SendStateType   tx;
+    uint8                 tx_buf[TCPIP_CFG_MAX_PACKETSIZE];
     TcpIp_ProtocolType    protocol;
     TcpIp_DomainType      domain;
     TcpIp_SocketStateType state;
@@ -511,14 +519,97 @@ Std_ReturnType TcpIp_UdpTransmit(
     return E_OK;
 }
 
+Std_ReturnType TcpIp_TcpTransmit_All(TcpIp_OsSocketType fd, uint8* data, uint16 len)
+{
+    int v;
+    while (len > 0) {
+        v = send(fd, data, len, 0);
+        if (v == -1) {
+            return E_NOT_OK;
+        } else {
+            len  -= v;
+            data += v;
+        }
+    }
+    return E_OK;
+}
+
+void TcpIp_TcpTransmit_Abort(TcpIp_SocketIdType id)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    s->tx.tot_rem = 0u;
+    s->tx.buf_rem = 0u;
+}
+
+Std_ReturnType TcpIp_TcpTransmit_Step(TcpIp_SocketIdType id)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+
+    if (s->tx.buf_rem == 0u) {
+        BufReq_ReturnType r;
+        if (s->tx.tot_rem < sizeof(s->tx_buf)) {
+            s->tx.buf_rem = (uint16)s->tx.tot_rem;
+        } else {
+            s->tx.buf_rem = sizeof(s->tx_buf);
+        }
+
+        r = SoAd_CopyTxData(id, s->tx_buf, s->tx.buf_rem);
+        if (r == BUFREQ_E_BUSY) {
+            return E_OK;
+        } else if (r != BUFREQ_OK) {
+            return E_NOT_OK;
+        }
+    }
+
+    int v = send(s->fd, s->tx.buf, s->tx.buf_rem, 0);
+    if (v == -1) {
+        v = errno;
+        if (v == EINTR) {
+            return E_OK;
+        } else {
+            return E_NOT_OK;
+        }
+    } else {
+        s->tx.buf     += v;
+        s->tx.buf_rem -= v;
+        s->tx.tot_rem -= v;
+    }
+
+    return E_OK;
+}
+
 Std_ReturnType TcpIp_TcpTransmit(
         TcpIp_SocketIdType  id,
         const uint8*        data,
-        uint32              aailable,
+        uint32              available,
         boolean             force
     )
 {
-    return E_NOT_OK;
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+    Std_ReturnType res;
+
+    if (data) {
+        s->tx.buf     = data;
+        s->tx.buf_rem = available;
+        s->tx.tot_rem = available;
+    } else {
+        s->tx.buf_rem = 0;
+        s->tx.tot_rem = available;
+    }
+
+    if (force || (data != NULL)) {
+        if (TcpIp_SetBlockingState(s->fd, TRUE) != E_OK) {
+            return E_NOT_OK;
+        }
+
+        while (s->tx.tot_rem > 0u) {
+            if (TcpIp_TcpTransmit_Step(id) != E_OK) {
+                TcpIp_TcpTransmit_Abort(id);
+                return E_NOT_OK;
+            }
+        }
+    }
+    return E_OK;
 }
 
 static Std_ReturnType TcpIp_GetFreeSocket(TcpIp_SocketIdType* socketid)
@@ -592,6 +683,7 @@ void TcpIp_SocketState_Connecting(TcpIp_SocketIdType index)
 void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType*  s   = &TcpIp_Sockets[index];
+    TcpIp_SocketType*  s2;
     TcpIp_SocketIdType id2 = TCPIP_SOCKETID_INVALID;
     int fd                 = INVALID_SOCKET;
 
@@ -609,6 +701,8 @@ void TcpIp_SocketState_Listen_Accept(TcpIp_SocketIdType index)
     if (TcpIp_SoAdGetSocket(s->domain, s->protocol, &id2) != E_OK) {
         goto cleanup;
     }
+    s2 = &TcpIp_Sockets[id2];
+    s2->fd = fd;
 
     if (TcpIp_GetSockaddrFromBsdSocketAddr(&data, (struct sockaddr*)&addr) != E_OK) {
         goto cleanup;
@@ -675,10 +769,25 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
     } else {
 
         TcpIp_SockAddrStorageType remote;
+        if (len == 0) {
+            len = sizeof(addr);
+            (void)getpeername(s->fd,  (struct sockaddr *)&addr, &len);
+        }
         if (TcpIp_GetSockaddrFromBsdSocketAddr(&remote, (struct sockaddr *)&addr) == E_OK) {
             SoAd_RxIndication(id, &remote.base, buf, v);
         }
 
+    }
+}
+
+void TcpIp_SocketState_Transmit(TcpIp_SocketIdType id)
+{
+    TcpIp_SocketType* s = &TcpIp_Sockets[id];
+
+    if (s->tx.tot_rem > 0u) {
+        if (TcpIp_TcpTransmit_Step(id) != E_OK) {
+            TcpIp_TcpTransmit_Abort(id);
+        }
     }
 }
 
@@ -712,6 +821,13 @@ void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
     }
 
     if (p->revents & POLLOUT) {
+        TcpIp_SocketState_Transmit(index);
+    }
+
+    if (s->tx.tot_rem > 0u) {
+        p->events = POLLIN | POLLOUT;
+    } else {
+        p->events = POLLIN;
     }
 }
 
@@ -728,7 +844,7 @@ static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateT
             break;
         case TCPIP_SOCKET_STATE_CONNECTED:
             SoAd_TcpConnected(index);
-            p->events = POLLIN | POLLOUT;
+            p->events = POLLIN;
             break;
         case TCPIP_SOCKET_STATE_LISTEN:
         case TCPIP_SOCKET_STATE_SHUTDOWN:
