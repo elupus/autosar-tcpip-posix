@@ -252,7 +252,7 @@ Std_ReturnType TcpIp_Close(
             TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
         } else {
             if (s->state == TCPIP_SOCKET_STATE_CONNECTED) {
-                if (shutdown(s->fd, SHUT_RD) == 0) {
+                if (shutdown(s->fd, SHUT_WR) == 0) {
                     TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_SHUTDOWN);
                     res = E_OK;
                 } else {
