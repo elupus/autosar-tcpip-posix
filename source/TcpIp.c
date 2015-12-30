@@ -616,6 +616,15 @@ Std_ReturnType TcpIp_TcpTransmit(
     return E_OK;
 }
 
+Std_ReturnType TcpIp_TcpReceived(
+        TcpIp_SocketIdType id,
+        uint32             len
+    )
+{
+    /* TODO */
+    return E_OK;
+}
+
 static Std_ReturnType TcpIp_GetFreeSocket(TcpIp_SocketIdType* socketid)
 {
     TcpIp_SocketIdType index;

@@ -398,6 +398,11 @@ Std_ReturnType TcpIp_TcpTransmit(
         boolean             force
     );
 
+Std_ReturnType TcpIp_TcpReceived(
+        TcpIp_SocketIdType id,
+        uint32             len
+    );
+
 Std_ReturnType TcpIp_ChangeParameter(
         TcpIp_SocketIdType id,
         TcpIp_ParamIdType  parm,
