@@ -404,4 +404,9 @@ Std_ReturnType TcpIp_ChangeParameter(
         const uint8*       value
     );
 
+Std_ReturnType TcpIp_Close(
+        TcpIp_SocketIdType          id,
+        boolean                     abort
+    );
+
 #endif /* TCPIP_H_ */
