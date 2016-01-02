@@ -252,6 +252,7 @@ Std_ReturnType TcpIp_Close(
     if (s->protocol == TCPIP_IPPROTO_TCP) {
         if (abort) {
             TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
+            res = E_OK;
         } else {
             if (s->state == TCPIP_SOCKET_STATE_CONNECTED) {
                 if (shutdown(s->fd, SHUT_WR) == 0) {
