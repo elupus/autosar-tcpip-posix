@@ -777,7 +777,7 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
     uint8 buf[TCPIP_CFG_MAX_PACKETSIZE];
     int   v;
     socklen_t len;
-    struct sockaddr_storage addr;
+    struct sockaddr_storage addr = {0};
     len = sizeof(addr);
 
     v = recvfrom(s->fd, buf, TCPIP_CFG_MAX_PACKETSIZE, 0, (struct sockaddr *)&addr, &len);
@@ -803,7 +803,7 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
     } else {
 
         TcpIp_SockAddrStorageType remote;
-        if (len == 0) {
+        if (addr.ss_family == 0) {
             len = sizeof(addr);
             (void)getpeername(s->fd,  (struct sockaddr *)&addr, &len);
         }
