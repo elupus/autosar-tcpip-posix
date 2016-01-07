@@ -721,6 +721,11 @@ void TcpIp_SocketState_Connecting(TcpIp_SocketIdType index)
     struct pollfd*    p = &TcpIp_PollFds[index];
     int v;
 
+    if ((p->revents & POLLHUP) || (p->revents & POLLERR)) {
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
+        return;
+    }
+
     if (p->revents & POLLOUT) {
         struct sockaddr_storage addr;
         socklen_t len = sizeof(addr);
@@ -787,6 +792,11 @@ void TcpIp_SocketState_Listen(TcpIp_SocketIdType index)
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
 
+    if ((p->revents & POLLHUP) || (p->revents & POLLERR)) {
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
+        return;
+    }
+
     if (p->revents & POLLIN) {
         TcpIp_SocketState_Listen_Accept(index);
     }
@@ -851,7 +861,12 @@ void TcpIp_SocketState_Shutdown(TcpIp_SocketIdType index)
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
 
-    if (p->revents & POLLIN) {
+    if (p->revents & POLLERR) {
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
+        return;
+    }
+
+    if ((p->revents & POLLIN) || (p->revents & POLLHUP)) {
         TcpIp_SocketState_Receive(index);
     }
 }
@@ -860,6 +875,11 @@ void TcpIp_SocketState_Bound(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
+
+    if ((p->revents & POLLHUP) || (p->revents & POLLERR)) {
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
+        return;
+    }
 
     if (p->revents & POLLIN) {
         TcpIp_SocketState_Receive(index);
@@ -871,7 +891,12 @@ void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
     struct pollfd*    p = &TcpIp_PollFds[index];
 
-    if (p->revents & POLLIN) {
+    if (p->revents & POLLERR) {
+        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
+        return;
+    }
+
+    if ((p->revents & POLLIN) || (p->revents & POLLHUP)) {
         TcpIp_SocketState_Receive(index);
     }
 
