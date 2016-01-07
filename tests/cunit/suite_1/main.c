@@ -19,6 +19,8 @@
 
 #include "CUnit/Basic.h"
 #include "CUnit/Automated.h"
+
+#include <unistd.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
