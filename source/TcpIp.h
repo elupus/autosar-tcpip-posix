@@ -419,4 +419,6 @@ Std_ReturnType TcpIp_Close(
         boolean                     abort
     );
 
+void TcpIp_MainFunction();
+
 #endif /* TCPIP_H_ */
