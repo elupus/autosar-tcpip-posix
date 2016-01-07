@@ -15,6 +15,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/**
+ * @file
+ * @ingroup TcpIp
+ */
+
+/**
+ * @addgroup TcpIp TcpIp
+ *
+ * A implementation of the AUTOSAR TcpIp component on top of berkley sockets
+ */
+
 #include "TcpIp.h"
 #include "TcpIp_Cfg.h"
 #include "SoAd_Cbk.h"

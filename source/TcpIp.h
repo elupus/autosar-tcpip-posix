@@ -15,6 +15,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/**
+ * @file
+ * @ingroup TcpIp
+ */
+
 #ifndef TCPIP_H_
 #define TCPIP_H_
 
