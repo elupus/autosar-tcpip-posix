@@ -110,25 +110,27 @@ TcpIp_ConfigType config = {
 
 int suite_init_v4(void)
 {
+    memset(&suite_state, 0, sizeof(suite_state));
+    suite_state.domain = TCPIP_AF_INET;
 	TcpIp_Init(&config);
-	suite_state.domain = TCPIP_AF_INET;
+    TcpIp_RequestComMode(0u, TCPIP_STATE_ONLINE);
     return 0;
 }
 
 
 int suite_init_v6(void)
 {
-    TcpIp_Init(&config);
+    memset(&suite_state, 0, sizeof(suite_state));
     suite_state.domain = TCPIP_AF_INET6;
+    TcpIp_Init(&config);
+    TcpIp_RequestComMode(0u, TCPIP_STATE_ONLINE);
     return 0;
 }
 
 int suite_clean(void)
 {
     TcpIp_SocketIdType index;
-    for(index = 0u; index < TCPIP_CFG_MAX_SOCKETS; ++index) {
-        TcpIp_SocketState_Enter(index, TCPIP_SOCKET_STATE_UNUSED);
-    }
+    TcpIp_RequestComMode(0u, TCPIP_STATE_OFFLINE);
     return 0;
 }
 

@@ -419,6 +419,11 @@ Std_ReturnType TcpIp_Close(
         boolean                     abort
     );
 
+Std_ReturnType TcpIp_RequestComMode(
+        uint8           id,
+        TcpIp_StateType state
+    );
+
 void TcpIp_MainFunction();
 
 #endif /* TCPIP_H_ */

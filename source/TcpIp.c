@@ -47,6 +47,10 @@
 #define TCPIP_CFG_MAX_PACKETSIZE 1024
 #endif
 
+#ifndef TCPIP_CFG_MAX_CONTROLLER
+#define TCPIP_CFG_MAX_CONTROLLER 1u
+#endif
+
 #ifndef TCPIP_CFG_ENABLE_DEVELOPMENT_ERROR
 #define TCPIP_CFG_ENABLE_DEVELOPMENT_ERROR STD_OFF
 #endif
@@ -104,8 +108,13 @@ typedef struct {
     TcpIp_OsSocketType    fd;
 } TcpIp_SocketType;
 
+typedef struct {
+    TcpIp_StateType       state;
+} TcpIp_EthState;
+
 TcpIp_SocketType      TcpIp_Sockets[TCPIP_CFG_MAX_SOCKETS];
 struct pollfd         TcpIp_PollFds[TCPIP_CFG_MAX_SOCKETS];
+TcpIp_EthState        TcpIp_Ctrl[TCPIP_CFG_MAX_CONTROLLER];
 
 static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateType state);
 
@@ -231,11 +240,65 @@ static Std_ReturnType TcpIp_SetBlockingState(TcpIp_OsSocketType fd, boolean bloc
 void TcpIp_Init(const TcpIp_ConfigType* config)
 {
     TcpIp_SocketIdType id;
+    uint8              ctrl;
     TcpIp_Config = config;
 
     for (id = 0u; id < TCPIP_CFG_MAX_SOCKETS; ++id) {
         TcpIp_InitSocket(id);
     }
+
+    for (ctrl = 0u; ctrl < TCPIP_CFG_MAX_CONTROLLER; ++ctrl) {
+        TcpIp_Ctrl[ctrl].state = TCPIP_STATE_OFFLINE;
+    }
+}
+
+/**
+ * @brief By this API service the TCP/IP stack is requested to change the TcpIp state of the
+ *        communication network identified by EthIf controller index.
+ * @param[in] id    EthIf controller index to identify the communication network
+ *                  where the TcpIp state is requested.
+ * @param{in] state Requested TcpIp state
+ * @return E_OK:     Service accepted
+ *         E_NOT_OK: Service denied
+ *
+ * @req SWS_TCPIP_00071-TODO
+ * @req SWS_TCPIP_00072
+ * @req SWS_TCPIP_00074-TODO
+ * @req SWS_TCPIP_00089
+ */
+Std_ReturnType TcpIp_RequestComMode(
+        uint8           id,
+        TcpIp_StateType state
+    )
+{
+    Std_ReturnType res;
+    if (id < TCPIP_CFG_MAX_CONTROLLER) {
+        switch (state) {
+            case TCPIP_STATE_OFFLINE: {
+                for (id = 0u; id < TCPIP_CFG_MAX_SOCKETS; ++id) {
+                    TcpIp_SocketState_Enter(id, TCPIP_SOCKET_STATE_UNUSED);
+                }
+                TcpIp_Ctrl[id].state = state;
+                res = E_OK;
+                break;
+            }
+
+            case TCPIP_STATE_SHUTDOWN:
+            case TCPIP_STATE_STARTUP: {
+                TCPIP_DET_ERROR(TCPIP_API_REQUESTCOMMODE, TCPIP_E_INV_ARG);
+                res = E_NOT_OK;
+                break;
+            }
+            default: {
+                TcpIp_Ctrl[id].state = state;
+                res = E_OK;
+                break;
+            }
+        }
+    } else {
+        res = E_NOT_OK;
+    }
+    return res;
 }
 
 /**
