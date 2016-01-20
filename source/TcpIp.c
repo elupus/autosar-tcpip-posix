@@ -625,18 +625,21 @@ Std_ReturnType TcpIp_TcpTransmit_Step(TcpIp_SocketIdType id)
 
     if (s->tx.buf_rem == 0u) {
         BufReq_ReturnType r;
+        uint16            len;
         if (s->tx.tot_rem < sizeof(s->tx_buf)) {
-            s->tx.buf_rem = (uint16)s->tx.tot_rem;
+            len = (uint16)s->tx.tot_rem;
         } else {
-            s->tx.buf_rem = sizeof(s->tx_buf);
+            len = sizeof(s->tx_buf);
         }
 
-        r = SoAd_CopyTxData(id, s->tx_buf, s->tx.buf_rem);
+        r = SoAd_CopyTxData(id, s->tx_buf, len);
         if (r == BUFREQ_E_BUSY) {
             return E_OK;
         } else if (r != BUFREQ_OK) {
             return E_NOT_OK;
         }
+        s->tx.buf_rem = len;
+        s->tx.buf     = s->tx_buf;
     }
 
     int v = send(s->fd, s->tx.buf, s->tx.buf_rem, 0);
