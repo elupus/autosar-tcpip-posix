@@ -94,13 +94,6 @@ typedef enum {
 } TcpIp_SocketStateType;
 
 typedef struct {
-    const uint8* buf;
-    uint16       buf_rem;
-    uint32       tot_rem;
-} TcpIp_SendStateType;
-
-typedef struct {
-    TcpIp_SendStateType   tx;
     uint8                 tx_buf[TCPIP_CFG_MAX_PACKETSIZE];
     TcpIp_ProtocolType    protocol;
     TcpIp_DomainType      domain;
@@ -573,13 +566,13 @@ Std_ReturnType TcpIp_UdpTransmit(
     if (data) {
         v = sendto(s->fd, data, len, 0, (struct sockaddr *)&addr, addr_len);
     } else {
-        uint8   buf[len];
-        uint8*  ptr     = buf;
-        uint16  ptr_len = len;
-        if (SoAd_CopyTxData(s->fd, buf, len) != BUFREQ_OK) {
+        if (len > sizeof(s->tx_buf)) {
             return E_NOT_OK;
         }
-        v = sendto(s->fd, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
+        if (SoAd_CopyTxData(s->fd, s->tx_buf, len) != BUFREQ_OK) {
+            return E_NOT_OK;
+        }
+        v = sendto(s->fd, s->tx_buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
     }
 
     if (v == -1) {
@@ -597,68 +590,6 @@ Std_ReturnType TcpIp_UdpTransmit(
     return E_OK;
 }
 
-Std_ReturnType TcpIp_TcpTransmit_All(TcpIp_OsSocketType fd, uint8* data, uint16 len)
-{
-    int v;
-    while (len > 0) {
-        v = send(fd, data, len, 0);
-        if (v == -1) {
-            return E_NOT_OK;
-        } else {
-            len  -= v;
-            data += v;
-        }
-    }
-    return E_OK;
-}
-
-void TcpIp_TcpTransmit_Abort(TcpIp_SocketIdType id)
-{
-    TcpIp_SocketType* s = &TcpIp_Sockets[id];
-    s->tx.tot_rem = 0u;
-    s->tx.buf_rem = 0u;
-}
-
-Std_ReturnType TcpIp_TcpTransmit_Step(TcpIp_SocketIdType id)
-{
-    TcpIp_SocketType* s = &TcpIp_Sockets[id];
-
-    if (s->tx.buf_rem == 0u) {
-        BufReq_ReturnType r;
-        uint16            len;
-        if (s->tx.tot_rem < sizeof(s->tx_buf)) {
-            len = (uint16)s->tx.tot_rem;
-        } else {
-            len = sizeof(s->tx_buf);
-        }
-
-        r = SoAd_CopyTxData(id, s->tx_buf, len);
-        if (r == BUFREQ_E_BUSY) {
-            return E_OK;
-        } else if (r != BUFREQ_OK) {
-            return E_NOT_OK;
-        }
-        s->tx.buf_rem = len;
-        s->tx.buf     = s->tx_buf;
-    }
-
-    int v = send(s->fd, s->tx.buf, s->tx.buf_rem, 0);
-    if (v == -1) {
-        v = errno;
-        if (v == EINTR) {
-            return E_OK;
-        } else {
-            return E_NOT_OK;
-        }
-    } else {
-        s->tx.buf     += v;
-        s->tx.buf_rem -= v;
-        s->tx.tot_rem -= v;
-    }
-
-    return E_OK;
-}
-
 Std_ReturnType TcpIp_TcpTransmit(
         TcpIp_SocketIdType  id,
         const uint8*        data,
@@ -669,27 +600,51 @@ Std_ReturnType TcpIp_TcpTransmit(
     TcpIp_SocketType* s = &TcpIp_Sockets[id];
     Std_ReturnType res;
 
-    if (data) {
-        s->tx.buf     = data;
-        s->tx.buf_rem = available;
-        s->tx.tot_rem = available;
-    } else {
-        s->tx.buf_rem = 0;
-        s->tx.tot_rem = available;
+    if (TcpIp_SetBlockingState(s->fd, TRUE) != E_OK) {
+        return E_NOT_OK;
     }
 
-    if (force || (data != NULL)) {
-        if (TcpIp_SetBlockingState(s->fd, TRUE) != E_OK) {
-            return E_NOT_OK;
-        }
+    do {
+        BufReq_ReturnType r;
+        uint16            len;
 
-        while (s->tx.tot_rem > 0u) {
-            if (TcpIp_TcpTransmit_Step(id) != E_OK) {
-                TcpIp_TcpTransmit_Abort(id);
+        /* deduce how much we copy each time */
+        if (available < sizeof(s->tx_buf)) {
+            len = (uint16)available;
+        } else {
+            len = sizeof(s->tx_buf);
+        }
+        available -= len;
+
+        if (data == NULL) {
+            r = SoAd_CopyTxData(id, s->tx_buf, len);
+            if (r == BUFREQ_E_BUSY) {
+                return E_OK;
+            } else if (r != BUFREQ_OK) {
                 return E_NOT_OK;
             }
+            data = s->tx_buf;
         }
-    }
+
+        /* we must enqueue all data we copied */
+        while (len > 0u) {
+            int v = send(s->fd, data, len, 0);
+            if (v == -1) {
+                v = errno;
+                if (v == EINTR) {
+                    continue;
+                } else {
+                    return E_NOT_OK;
+                }
+            } else {
+                len  -= v;
+                data += v;
+            }
+        }
+        data = NULL;
+
+    } while (available > 0u && force);
+
     return E_OK;
 }
 
@@ -911,17 +866,6 @@ void TcpIp_SocketState_Receive(TcpIp_SocketIdType id)
     }
 }
 
-void TcpIp_SocketState_Transmit(TcpIp_SocketIdType id)
-{
-    TcpIp_SocketType* s = &TcpIp_Sockets[id];
-
-    if (s->tx.tot_rem > 0u) {
-        if (TcpIp_TcpTransmit_Step(id) != E_OK) {
-            TcpIp_TcpTransmit_Abort(id);
-        }
-    }
-}
-
 void TcpIp_SocketState_Shutdown(TcpIp_SocketIdType index)
 {
     TcpIp_SocketType* s = &TcpIp_Sockets[index];
@@ -966,15 +910,7 @@ void TcpIp_SocketState_Connected(TcpIp_SocketIdType index)
         TcpIp_SocketState_Receive(index);
     }
 
-    if (p->revents & POLLOUT) {
-        TcpIp_SocketState_Transmit(index);
-    }
-
-    if (s->tx.tot_rem > 0u) {
-        p->events = POLLIN | POLLOUT;
-    } else {
-        p->events = POLLIN;
-    }
+    p->events = POLLIN;
 }
 
 static void TcpIp_SocketState_Enter(TcpIp_SocketIdType index, TcpIp_SocketStateType state)
